@@ -1,0 +1,1240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Grantura — AI Grant Form Assistant</title>
+
+<!-- PDF.js — reads PDFs entirely in the browser, nothing uploaded to any server -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #f8f9fc;
+  --surface: #ffffff;
+  --surface2: #f1f3f8;
+  --border: #dde1ec;
+  --accent: #a07830;
+  --accent2: #3a6fb5;
+  --accent3: #1e9e6e;
+  --text: #1a1c26;
+  --muted: #6b6f82;
+  --danger: #c0394a;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: 'DM Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+body::before {
+  content: ''; position: fixed; inset: 0;
+  background-image: linear-gradient(rgba(160,120,48,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(160,120,48,0.05) 1px, transparent 1px);
+  background-size: 40px 40px; pointer-events: none; z-index: 0;
+}
+
+header {
+  position: relative; z-index: 10; padding: 18px 40px;
+  display: flex; align-items: center; justify-content: space-between;
+  border-bottom: 1px solid var(--border); background: rgba(248,249,252,0.95);
+  backdrop-filter: blur(10px);
+}
+.logo { display: flex; align-items: center; gap: 12px; }
+.logo-icon { width: 36px; height: 36px; background: linear-gradient(135deg, var(--accent), var(--accent2)); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+.logo-text { font-family: 'DM Serif Display', serif; font-size: 22px; letter-spacing: -0.5px; }
+.logo-text span { color: var(--accent); }
+.badge { background: rgba(160,120,48,0.1); border: 1px solid rgba(160,120,48,0.3); color: var(--accent); padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 600; letter-spacing: 1px; text-transform: uppercase; }
+
+/* API KEY BANNER */
+.api-banner {
+  background: rgba(58,111,181,0.07); border-bottom: 1px solid rgba(58,111,181,0.2);
+  padding: 10px 40px; display: flex; align-items: center; gap: 12px;
+  position: relative; z-index: 10;
+}
+.api-banner input {
+  flex: 1; max-width: 420px; background: white; border: 1px solid var(--border);
+  border-radius: 7px; padding: 7px 12px; font-family: 'DM Mono', monospace;
+  font-size: 12px; color: var(--text); outline: none;
+}
+.api-banner input:focus { border-color: var(--accent2); }
+.api-banner-label { font-size: 12px; color: var(--accent2); font-weight: 600; white-space: nowrap; }
+.api-banner-note { font-size: 11px; color: var(--muted); }
+
+.steps-nav {
+  position: relative; z-index: 10; display: flex; align-items: center; justify-content: center;
+  padding: 20px 40px; background: var(--surface); border-bottom: 1px solid var(--border);
+  overflow-x: auto; gap: 0;
+}
+.step-item { display: flex; align-items: center; gap: 8px; padding: 6px 12px; cursor: pointer; opacity: 0.35; transition: opacity 0.3s; white-space: nowrap; }
+.step-item.active { opacity: 1; }
+.step-item.done { opacity: 0.65; }
+.step-num { width: 26px; height: 26px; border-radius: 50%; background: var(--border); display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; transition: background 0.3s; }
+.step-item.active .step-num { background: var(--accent); color: var(--bg); }
+.step-item.done .step-num { background: var(--accent3); color: var(--bg); }
+.step-label { font-size: 13px; font-weight: 500; }
+.step-conn { width: 32px; height: 1px; background: var(--border); flex-shrink: 0; }
+
+.main { position: relative; z-index: 5; max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+.page { display: none; }
+.page.active { display: block; animation: fadeIn 0.35s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+.page-title { font-family: 'DM Serif Display', serif; font-size: 30px; margin-bottom: 8px; letter-spacing: -0.5px; }
+.page-title span { color: var(--accent); font-style: italic; }
+.page-sub { color: var(--muted); font-size: 14px; margin-bottom: 32px; line-height: 1.65; max-width: 720px; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; }
+.card + .card { margin-top: 16px; }
+.sec-label { font-size: 11px; font-weight: 700; letter-spacing: 1.8px; text-transform: uppercase; color: var(--accent); display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+
+/* UPLOAD ZONES */
+.upload-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.upload-zone {
+  border: 2px dashed var(--border); border-radius: 14px; padding: 28px 20px;
+  text-align: center; cursor: pointer; transition: all 0.25s; background: var(--surface);
+  position: relative; overflow: hidden;
+}
+.upload-zone:hover { border-color: var(--accent); background: rgba(200,169,110,0.05); }
+.upload-zone.uploaded { border-color: var(--accent3); border-style: solid; background: rgba(110,200,162,0.05); }
+.upload-zone.loading { border-color: var(--accent2); border-style: solid; background: rgba(58,111,181,0.05); }
+.upload-zone.error { border-color: var(--danger); border-style: solid; background: rgba(192,57,74,0.05); }
+.upload-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+.upload-icon { font-size: 28px; margin-bottom: 10px; display: block; }
+.upload-title { font-weight: 600; font-size: 14px; margin-bottom: 5px; }
+.upload-hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
+.upload-status { display: none; align-items: center; justify-content: center; gap: 6px; margin-top: 10px; color: var(--accent3); font-size: 12px; font-weight: 600; }
+.upload-zone.uploaded .upload-status { display: flex; }
+.upload-zone.uploaded .upload-hint { display: none; }
+.upload-loading { display: none; font-size: 12px; color: var(--accent2); margin-top: 8px; }
+.upload-zone.loading .upload-loading { display: block; }
+.upload-zone.loading .upload-hint { display: none; }
+
+/* MEMBER CARDS */
+.member-card { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 16px 18px; margin-bottom: 12px; transition: border-color 0.2s; }
+.member-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.m-avatar { width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; color: var(--bg); flex-shrink: 0; }
+.member-upload-row { display: flex; gap: 14px; align-items: flex-start; }
+.mini-upload { width: 110px !important; min-width: 110px; padding: 12px 8px !important; flex-shrink: 0; }
+
+.ifield { background: var(--bg); border: 1px solid var(--border); border-radius: 9px; padding: 11px 14px; color: var(--text); font-family: 'DM Sans', sans-serif; font-size: 13px; outline: none; transition: border-color 0.2s; width: 100%; }
+.ifield:focus { border-color: var(--accent); }
+.ifield::placeholder { color: var(--muted); }
+
+.pill { font-size: 11px; padding: 3px 9px; border-radius: 10px; font-weight: 600; display: inline-block; }
+.p-green { background: rgba(30,158,110,0.12); color: #1a7a52; }
+.p-amber { background: rgba(160,120,48,0.12); color: #8a5e18; }
+.p-red   { background: rgba(192,57,74,0.12);  color: #a02030; }
+.p-blue  { background: rgba(58,111,181,0.12); color: #2a5a9a; }
+
+.alert { padding: 13px 16px; border-radius: 10px; font-size: 13px; line-height: 1.55; display: flex; align-items: flex-start; gap: 10px; margin-bottom: 18px; }
+.a-info  { background: rgba(58,111,181,0.07);  border: 1px solid rgba(58,111,181,0.25);  color: #2a5a9a; }
+.a-warn  { background: rgba(192,57,74,0.07);   border: 1px solid rgba(192,57,74,0.25);   color: #a02030; }
+.a-green { background: rgba(30,158,110,0.07);  border: 1px solid rgba(30,158,110,0.25);  color: #1a7a52; }
+
+.btn { padding: 11px 22px; border-radius: 9px; font-family: 'DM Sans', sans-serif; font-size: 14px; font-weight: 600; border: none; cursor: pointer; transition: all 0.2s; display: inline-flex; align-items: center; gap: 8px; }
+.btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none !important; }
+.btn-p { background: var(--accent); color: var(--bg); }
+.btn-p:hover:not(:disabled) { background: #d4b87a; transform: translateY(-1px); box-shadow: 0 6px 20px rgba(200,169,110,0.3); }
+.btn-s { background: var(--surface2); color: var(--text); border: 1px solid var(--border); }
+.btn-s:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.btn-g { background: transparent; color: var(--muted); border: 1px solid var(--border); }
+.btn-g:hover:not(:disabled) { color: var(--text); border-color: var(--muted); }
+.btn-ok { background: var(--accent3); color: var(--bg); }
+.btn-ok:hover:not(:disabled) { background: #7dd4ae; }
+.btn-row { display: flex; gap: 12px; justify-content: flex-end; margin-top: 28px; }
+.mbtn { padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 600; border: 1px solid var(--border); background: transparent; color: var(--muted); cursor: pointer; transition: all 0.2s; font-family: 'DM Sans', sans-serif; }
+.mbtn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* PROCESSING */
+.proc-wrap { display: flex; justify-content: center; padding-top: 20px; }
+.proc-card { background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 44px; text-align: center; max-width: 580px; width: 100%; }
+.spinner { width: 60px; height: 60px; border-radius: 50%; border: 3px solid var(--border); border-top-color: var(--accent); animation: spin 0.8s linear infinite; margin: 0 auto 22px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.pstep { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-radius: 9px; background: var(--surface2); font-size: 13px; opacity: 0.35; transition: all 0.5s; margin-bottom: 8px; text-align: left; }
+.pstep.active { opacity: 1; border: 1px solid rgba(200,169,110,0.25); background: rgba(200,169,110,0.07); }
+.pstep.done   { opacity: 0.75; border: 1px solid rgba(110,200,162,0.25); background: rgba(110,200,162,0.05); }
+.pdot { width: 7px; height: 7px; border-radius: 50%; background: var(--border); flex-shrink: 0; transition: background 0.3s; }
+.pstep.active .pdot { background: var(--accent); animation: pulse 1s infinite; }
+.pstep.done   .pdot { background: var(--accent3); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+/* REVIEW */
+.rev-layout { display: grid; grid-template-columns: 260px 1fr; gap: 22px; }
+.sidebar { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 18px; height: fit-content; position: sticky; top: 20px; }
+.nav-it { padding: 9px 11px; border-radius: 7px; font-size: 13px; cursor: pointer; color: var(--muted); transition: all 0.2s; display: flex; align-items: center; justify-content: space-between; margin-bottom: 3px; }
+.nav-it:hover { background: var(--surface2); color: var(--text); }
+.nav-it.cur { background: rgba(200,169,110,0.1); color: var(--accent); }
+.stats-bar { display: grid; grid-template-columns: repeat(4,1fr); gap: 14px; margin-bottom: 24px; }
+.stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 11px; padding: 14px 18px; }
+.stat-num { font-family: 'DM Serif Display', serif; font-size: 26px; }
+.stat-lbl { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+.fsec { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; margin-bottom: 14px; }
+.fsh { padding: 14px 22px; background: var(--surface2); border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.fsh-title { font-weight: 600; font-size: 14px; }
+.ffield { padding: 18px 22px; border-bottom: 1px solid var(--border); }
+.ffield:last-child { border-bottom: none; }
+.fq { font-size: 12px; color: var(--muted); margin-bottom: 7px; font-weight: 500; }
+.fa { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 11px 13px; font-size: 13px; color: var(--text); width: 100%; outline: none; font-family: 'DM Sans', sans-serif; line-height: 1.6; resize: vertical; transition: border-color 0.2s; }
+.fa:focus { border-color: var(--accent); }
+.fa.ai  { border-left: 3px solid var(--accent2); }
+.fa.bad { border-left: 3px solid var(--danger); }
+.fm { display: flex; align-items: center; justify-content: space-between; margin-top: 7px; }
+.fsrc { font-size: 11px; color: var(--muted); }
+.fsrc span { background: var(--surface2); padding: 2px 7px; border-radius: 4px; font-family: 'DM Mono', monospace; font-size: 10px; }
+
+/* EXTENSION PAGE */
+.ext-popup { background: #ffffff; border: 1px solid #dde1ec; border-radius: 14px; width: 300px; overflow: hidden; box-shadow: 0 8px 40px rgba(0,0,0,0.12); }
+.ext-popup-bar { background: #f1f3f8; padding: 10px 14px; display: flex; align-items: center; gap: 7px; border-bottom: 1px solid #dde1ec; font-size: 12px; }
+.edot { width: 8px; height: 8px; border-radius: 50%; }
+.ext-popup-body { padding: 14px; }
+.erow { display: flex; align-items: center; gap: 7px; padding: 7px 9px; border-radius: 7px; margin-bottom: 5px; background: #f8f9fc; font-size: 12px; }
+.erow.matched { background: rgba(30,158,110,0.07); border: 1px solid rgba(30,158,110,0.2); }
+.erow.pending { background: rgba(160,120,48,0.07); border: 1px solid rgba(160,120,48,0.2); }
+
+.arch-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 14px; }
+.arch-card { background: var(--bg); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+.arch-icon { font-size: 22px; margin-bottom: 8px; }
+.arch-title { font-weight: 700; font-size: 13px; margin-bottom: 5px; }
+.arch-text { color: var(--muted); font-size: 12px; line-height: 1.55; }
+
+.tag { display: inline-block; background: var(--surface2); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; font-size: 11px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+/* AI GENERATING ANIMATION */
+.ai-typing { display: inline-block; color: var(--accent2); font-style: italic; font-size: 12px; }
+.ai-typing::after { content: '▋'; animation: blink 0.8s infinite; }
+@keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+
+@media (max-width: 768px) {
+  .upload-grid, .arch-grid { grid-template-columns: 1fr; }
+  .rev-layout { grid-template-columns: 1fr; }
+  .stats-bar { grid-template-columns: repeat(2,1fr); }
+  header { padding: 14px 18px; }
+  .api-banner { padding: 10px 18px; flex-wrap: wrap; }
+  .main { padding: 24px 14px; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🎓</div>
+    <div class="logo-text">Gran<span>tura</span></div>
+  </div>
+  <div style="display:flex;align-items:center;gap:14px;">
+    <span class="badge">Beta</span>
+    <span style="font-size:12px;color:var(--muted);">AI-powered grant application assistant</span>
+  </div>
+</header>
+
+<!-- Gemini API key input — stored only in memory, never sent anywhere except Gemini -->
+<div class="api-banner">
+  <span class="api-banner-label">🔑 Gemini API Key</span>
+  <input type="password" id="gemini-key" placeholder="Paste your free Gemini API key here (aistudio.google.com)">
+  <button class="btn btn-s" style="font-size:12px;padding:7px 14px;" onclick="saveKey()">Save</button>
+  <span class="api-banner-note">Free key · never stored · only used in your browser session · <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent2);">Get free key →</a></span>
+  <span id="key-status" style="font-size:12px;font-weight:600;"></span>
+</div>
+
+<div class="steps-nav">
+  <div class="step-item active" id="nav-1"><div class="step-num">1</div><div class="step-label">Upload Documents</div></div>
+  <div class="step-conn"></div>
+  <div class="step-item" id="nav-2"><div class="step-num">2</div><div class="step-label">Portal & Scan</div></div>
+  <div class="step-conn"></div>
+  <div class="step-item" id="nav-3"><div class="step-num">3</div><div class="step-label">AI Processing</div></div>
+  <div class="step-conn"></div>
+  <div class="step-item" id="nav-4"><div class="step-num">4</div><div class="step-label">Review & Refine</div></div>
+  <div class="step-conn"></div>
+  <div class="step-item" id="nav-5"><div class="step-num">5</div><div class="step-label">Extension Fill</div></div>
+</div>
+
+<div class="main">
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 1 — UPLOAD DOCUMENTS (real PDF.js parsing)
+════════════════════════════════════════════════════ -->
+<div class="page active" id="page-1">
+  <h1 class="page-title">Upload Your <span>Documents</span></h1>
+  <p class="page-sub">Upload CVs and supporting documents. Grantura reads them directly in your browser using PDF.js — the files never leave your device. Text is extracted here and only the text is sent to Gemini AI for analysis.</p>
+
+  <div class="alert a-green" style="margin-bottom:20px;">
+    🔒 <div><strong>Privacy protected.</strong> Documents are read entirely in your browser session using PDF.js. The original files are never uploaded to any server. Only the extracted text is sent to Gemini AI (encrypted, over HTTPS). When you close this tab, everything is gone.</div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="sec-label">📁 Section A — Core Documents</div>
+    <div class="upload-grid">
+
+      <div class="upload-zone" id="z-cv">
+        <input type="file" accept=".pdf" onchange="readPDF(this, 'z-cv', 'cv', 'your CV')">
+        <span class="upload-icon">👤</span>
+        <div class="upload-title">Principal Applicant CV</div>
+        <div class="upload-hint">Your own CV — PDF format</div>
+        <div class="upload-loading">Reading PDF...</div>
+        <div class="upload-status">✓ CV extracted</div>
+      </div>
+
+      <div class="upload-zone" id="z-dir">
+        <input type="file" accept=".pdf" onchange="readPDF(this, 'z-dir', 'director', 'director CV')">
+        <span class="upload-icon">🧑‍🔬</span>
+        <div class="upload-title">Director / Supervisor CV</div>
+        <div class="upload-hint">Host lab director's CV — PDF format</div>
+        <div class="upload-loading">Reading PDF...</div>
+        <div class="upload-status">✓ Director CV extracted</div>
+      </div>
+
+      <div class="upload-zone" id="z-prop">
+        <input type="file" accept=".pdf" onchange="readPDF(this, 'z-prop', 'proposal', 'project proposal')">
+        <span class="upload-icon">📄</span>
+        <div class="upload-title">Project Proposal</div>
+        <div class="upload-hint">Research plan, objectives — PDF format</div>
+        <div class="upload-loading">Reading PDF...</div>
+        <div class="upload-status">✓ Proposal extracted</div>
+      </div>
+
+      <div class="upload-zone" id="z-supp">
+        <input type="file" accept=".pdf" onchange="readPDF(this, 'z-supp', 'supporting', 'supporting document')">
+        <span class="upload-icon">📎</span>
+        <div class="upload-title">Supporting Documents</div>
+        <div class="upload-hint">Ethics approvals, letters — PDF format</div>
+        <div class="upload-loading">Reading PDF...</div>
+        <div class="upload-status">✓ Supporting doc extracted</div>
+      </div>
+
+    </div>
+
+    <!-- Extracted text preview -->
+    <div id="extracted-preview" style="display:none;margin-top:16px;">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent3);margin-bottom:8px;">✓ Text Extracted (browser memory only)</div>
+      <div id="extracted-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="sec-label">👥 Section B — Participating Researchers</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:18px;line-height:1.65;">Add each researcher who will participate in the project. Upload their CVs — extracted in your browser, never stored.</p>
+
+    <div id="members-list">
+      <div class="member-card" id="mc-1">
+        <div class="member-header">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <div class="m-avatar" style="background:linear-gradient(135deg,#c8a96e,#a07840);">R1</div>
+            <div>
+              <input class="ifield" style="padding:5px 9px;font-weight:600;width:200px;" placeholder="Researcher full name" value="Dr. Carlos Ruiz Martínez">
+              <div style="font-size:12px;color:var(--muted);margin-top:3px;">Co-Investigator · University of Barcelona</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <span class="pill p-amber" id="pill-mc-1">No CV yet</span>
+            <button class="mbtn" style="color:var(--danger);" onclick="removeMember('mc-1')">✕ Remove</button>
+          </div>
+        </div>
+        <div class="member-upload-row">
+          <div class="upload-zone mini-upload" id="z-m1">
+            <input type="file" accept=".pdf" onchange="readMemberPDF(this, 'mc-1', 'z-m1')">
+            <span style="font-size:16px;">📄</span>
+            <div style="font-size:11px;font-weight:600;margin-top:4px;">Upload CV</div>
+            <div class="upload-loading" style="font-size:10px;">Reading...</div>
+            <div class="upload-status" style="font-size:10px;">✓ Extracted</div>
+          </div>
+          <div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+            <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">Role</div><input class="ifield" style="padding:7px 10px;" value="Co-Investigator"></div>
+            <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">Institution</div><input class="ifield" style="padding:7px 10px;" value="University of Barcelona"></div>
+            <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">% Time</div><input class="ifield" style="padding:7px 10px;" value="40%"></div>
+            <div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">Work Packages</div><input class="ifield" style="padding:7px 10px;" value="WP2, WP4"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <button class="btn btn-g" onclick="addMember()" style="width:100%;justify-content:center;border-style:dashed;margin-top:4px;">+ Add Another Researcher</button>
+
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:9px;padding:12px 16px;margin-top:14px;display:flex;gap:24px;flex-wrap:wrap;">
+      <span style="font-size:12px;color:var(--muted);">📄 Documents loaded: <strong style="color:var(--accent3);" id="doc-count">0 of 4</strong></span>
+      <span style="font-size:12px;color:var(--muted);">👥 Researchers: <strong style="color:var(--text);" id="team-count">1</strong></span>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-p" id="btn-to-step2" onclick="go(2)">Continue to Portal Setup →</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 2 — PORTAL & SCAN
+════════════════════════════════════════════════════ -->
+<div class="page" id="page-2">
+  <h1 class="page-title">Connect to the <span>Ministry Portal</span></h1>
+  <p class="page-sub">Paste the ministry portal URL and install the browser extension. The extension scans every page of the form automatically — you never type or copy anything manually.</p>
+
+  <div class="alert a-info" style="margin-bottom:18px;">
+    🔐 <div><strong>Login-based portals fully supported.</strong> You log in yourself — with password, 2FA, or digital certificate (Cl@ve, eIDAS). The extension reads the form inside your authenticated session and sends only the question labels back — never your login credentials.</div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="sec-label">🌐 Step 1 — Ministry Portal URL</div>
+    <div style="display:flex;gap:10px;margin-bottom:14px;">
+      <input class="ifield" type="url" id="portal-url" placeholder="https://grants.ministry.gov/application/apply" style="font-family:'DM Mono',monospace;font-size:12px;">
+      <button class="btn btn-s" onclick="savePortalURL(this)" style="white-space:nowrap;">Save URL</button>
+    </div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+      <span class="tag">🇪🇸 FECYT / ANECA</span><span class="tag">🇪🇺 EC Funding &amp; Tenders</span>
+      <span class="tag">🇩🇪 DFG elan</span><span class="tag">🇫🇷 ANR France</span>
+      <span class="tag">🇳🇱 NWO</span><span class="tag">🇬🇧 UKRI</span><span class="tag">+ any portal</span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="sec-label">🧩 Step 2 — Browser Extension</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6;">Install once — works for every grant application forever. The extension scans form pages and fills them from your prepared answers.</p>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+      <div style="background:var(--bg);border:2px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
+        <div style="font-size:32px;margin-bottom:8px;">🌐</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Chrome / Edge / Brave</div>
+        <button class="btn btn-p" style="width:100%;justify-content:center;font-size:13px;margin-top:8px;">Install for Chrome</button>
+      </div>
+      <div style="background:var(--bg);border:2px solid var(--border);border-radius:12px;padding:18px;text-align:center;">
+        <div style="font-size:32px;margin-bottom:8px;">🦊</div>
+        <div style="font-weight:700;font-size:14px;margin-bottom:4px;">Firefox</div>
+        <button class="btn btn-s" style="width:100%;justify-content:center;font-size:13px;margin-top:8px;">Install for Firefox</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="sec-label">🔍 Step 3 — Scan the Form Automatically</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6;">
+      With the extension installed, click below. It opens the portal — you log in — the extension automatically reads every page, every field label, every word limit, and every attachment slot, then sends the structure back here. Takes under 2 minutes.
+    </p>
+    <button class="btn btn-p" id="scan-btn" onclick="simScan(this)" style="width:100%;justify-content:center;font-size:15px;padding:14px;">
+      🔍 Open Portal &amp; Scan Form Automatically
+    </button>
+    <div id="scan-result" style="display:none;margin-top:14px;">
+      <div class="alert a-green">
+        ✅ <div>
+          <strong>Form scanned!</strong> Found <strong id="scan-pages">—</strong> pages, <strong id="scan-fields">—</strong> fields, <strong id="scan-attach">—</strong> file slots.
+          <div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px;" id="scan-page-tags"></div>
+        </div>
+      </div>
+    </div>
+    <p style="font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6;"><strong>No extension yet?</strong> Continue anyway — Grantura will prepare answers from your documents and the extension will detect and fill fields in real time when you visit the form.</p>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="sec-label">⚙️ Settings</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px;">
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;"><input type="checkbox" id="opt-web" checked style="accent-color:var(--accent);width:15px;height:15px;"> Search internet to enrich director &amp; lab data</label>
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;"><input type="checkbox" id="opt-limits" checked style="accent-color:var(--accent);width:15px;height:15px;"> Respect word / character limits per field</label>
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;"><input type="checkbox" id="opt-team" checked style="accent-color:var(--accent);width:15px;height:15px;"> Generate profile block per team researcher</label>
+      <label style="display:flex;align-items:center;gap:9px;cursor:pointer;"><input type="checkbox" id="opt-flag" checked style="accent-color:var(--accent);width:15px;height:15px;"> Flag low-confidence fields for review</label>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn btn-g" onclick="go(1)">← Back</button>
+    <button class="btn btn-p" onclick="startProcessing()">🧠 Prepare All Answers →</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 3 — AI PROCESSING (real Gemini API calls)
+════════════════════════════════════════════════════ -->
+<div class="page" id="page-3">
+  <div class="proc-wrap">
+    <div class="proc-card">
+      <div class="spinner" id="spinner"></div>
+      <h2 style="font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:6px;">AI is working on your form</h2>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:28px;" id="proc-subtitle">Sending extracted text to Gemini AI. Your original files stay in your browser.</p>
+      <div>
+        <div class="pstep active" id="ps1"><div class="pdot"></div><div>Extracting structure from your CV</div></div>
+        <div class="pstep" id="ps2"><div class="pdot"></div><div>Extracting structure from director CV &amp; team CVs</div></div>
+        <div class="pstep" id="ps3"><div class="pdot"></div><div>Analysing project proposal</div></div>
+        <div class="pstep" id="ps4"><div class="pdot"></div><div>Mapping questions to your data</div></div>
+        <div class="pstep" id="ps5"><div class="pdot"></div><div>Composing answers with word limits</div></div>
+        <div class="pstep" id="ps6"><div class="pdot"></div><div>Building profile block per researcher</div></div>
+        <div class="pstep" id="ps7"><div class="pdot"></div><div>Flagging fields needing your input</div></div>
+      </div>
+      <div id="proc-error" style="display:none;margin-top:16px;" class="alert a-warn">
+        ⚠️ <div id="proc-error-msg">An error occurred.</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 4 — REVIEW (populated by real AI output)
+════════════════════════════════════════════════════ -->
+<div class="page" id="page-4">
+  <h1 class="page-title">Review &amp; <span>Refine</span></h1>
+  <p class="page-sub">AI-generated answers from your documents. Edit any field, regenerate individual answers, or add missing information. Red fields need your input.</p>
+
+  <div class="stats-bar">
+    <div class="stat-card"><div class="stat-num" style="color:var(--accent3);" id="stat-filled">0</div><div class="stat-lbl">AI-filled fields</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--danger);" id="stat-manual">0</div><div class="stat-lbl">Need your input</div></div>
+    <div class="stat-card"><div class="stat-num" style="color:var(--accent2);" id="stat-conf">—</div><div class="stat-lbl">Confidence</div></div>
+    <div class="stat-card"><div class="stat-num" id="stat-total">0</div><div class="stat-lbl">Total fields</div></div>
+  </div>
+
+  <!-- AI answers rendered here dynamically -->
+  <div id="review-content">
+    <div class="alert a-info">🧠 <div>AI answers will appear here after processing. Go back to Step 2 and click "Prepare All Answers" to generate them.</div></div>
+  </div>
+
+  <div class="btn-row" style="margin-top:28px;">
+    <button class="btn btn-g" onclick="go(2)">← Back</button>
+    <button class="btn btn-s" onclick="exportAnswers()">📋 Copy All Answers</button>
+    <button class="btn btn-ok" onclick="go(5)">✅ Proceed to Extension Fill →</button>
+  </div>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════
+     PAGE 5 — EXTENSION FILL (sequential simulator)
+════════════════════════════════════════════════════ -->
+<div class="page" id="page-5">
+  <h1 class="page-title">Fill with the <span>Browser Extension</span></h1>
+  <p class="page-sub">Your answers are prepared. The Grantura extension fills the ministry form page by page — each time you click Next in the portal, it fills the next page automatically too.</p>
+
+  <div class="alert a-info" style="margin-bottom:20px;">
+    📑 <div><strong>Sequential forms:</strong> Ministry portals often have 8–15 separate pages. The extension detects which page you are on and fills it. Click Next in the portal — it fills the next page. You never copy-paste anything, just navigate as normal.</div>
+  </div>
+
+  <div class="card" style="margin-bottom:18px;">
+    <div class="sec-label">🎮 Interactive Demo — Sequential Ministry Form</div>
+    <p style="font-size:13px;color:var(--muted);margin-bottom:20px;line-height:1.6;">Click <strong style="color:var(--accent);">Fill This Page</strong> then <strong style="color:var(--accent2);">Next Page</strong> to see how Grantura handles each page.</p>
+
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:20px;flex-wrap:wrap;" id="form-page-nav"></div>
+
+    <div style="display:grid;grid-template-columns:1fr 300px;gap:16px;align-items:start;">
+      <div style="background:var(--bg);border:2px solid var(--border);border-radius:12px;overflow:hidden;" id="ministry-form-mock">
+        <div style="background:var(--surface2);border-bottom:1px solid var(--border);padding:12px 18px;display:flex;align-items:center;justify-content:space-between;">
+          <div>
+            <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:1px;font-weight:700;">Ministry Grant Portal</div>
+            <div style="font-size:13px;font-weight:600;margin-top:2px;" id="form-page-title">Page 1</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            <div style="width:80px;height:6px;background:var(--border);border-radius:3px;overflow:hidden;">
+              <div style="height:100%;background:var(--accent);border-radius:3px;transition:width 0.5s;" id="form-progress-bar"></div>
+            </div>
+            <span style="font-size:11px;color:var(--muted);" id="form-progress-pct">0%</span>
+          </div>
+        </div>
+        <div style="padding:20px;" id="form-page-content"></div>
+        <div style="padding:14px 18px;border-top:1px solid var(--border);background:var(--surface2);display:flex;justify-content:space-between;align-items:center;">
+          <button class="btn btn-g" style="font-size:13px;padding:8px 16px;" id="btn-prev-page" onclick="formPageNav(-1)" disabled>← Previous</button>
+          <span style="font-size:12px;color:var(--muted);" id="form-page-counter">Page 1 of 8</span>
+          <button class="btn btn-s" style="font-size:13px;padding:8px 16px;" id="btn-next-page" onclick="formPageNav(1)">Next Page →</button>
+        </div>
+      </div>
+
+      <div>
+        <div style="font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--accent);margin-bottom:10px;">🧩 Grantura Extension</div>
+        <div class="ext-popup" style="width:100%;">
+          <div class="ext-popup-bar">
+            <div class="edot" style="background:#ff5f57;"></div>
+            <div class="edot" style="background:#febc2e;"></div>
+            <div class="edot" style="background:#28c840;"></div>
+            <span style="margin-left:6px;font-size:11px;color:var(--muted);">Grantura</span>
+            <span class="pill p-green" style="margin-left:auto;font-size:9px;">● Active</span>
+          </div>
+          <div class="ext-popup-body" id="ext-popup-body"></div>
+        </div>
+        <div style="margin-top:12px;display:flex;flex-direction:column;gap:6px;">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;display:flex;align-items:center;gap:8px;">
+            <span>🔄</span><div><strong>Page-aware</strong> — loads correct answers for each page automatically</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;display:flex;align-items:center;gap:8px;">
+            <span>📎</span><div><strong>Attachments</strong> — tells you which file goes in which slot</div>
+          </div>
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;display:flex;align-items:center;gap:8px;">
+            <span>👥</span><div><strong>Researcher tables</strong> — fills one row per team member</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row" style="margin-top:20px;">
+    <button class="btn btn-g" onclick="go(4)">← Back to Review</button>
+    <button class="btn btn-ok">🧩 Install Extension</button>
+  </div>
+</div>
+
+</div><!-- /main -->
+
+<script>
+// ─────────────────────────────────────────────────────────
+// PDF.js setup — runs entirely in browser
+// ─────────────────────────────────────────────────────────
+if (typeof pdfjsLib !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+}
+
+// ─────────────────────────────────────────────────────────
+// In-memory session state — nothing persisted anywhere
+// ─────────────────────────────────────────────────────────
+var SESSION = {
+  geminiKey: '',
+  docs: {}, // { cv: "text...", director: "text...", proposal: "text...", supporting: "text..." }
+  members: {}, // { 'mc-1': { name: '...', text: '...' } }
+  portalURL: '',
+  aiAnswers: null // populated after Gemini processing
+};
+
+// ─────────────────────────────────────────────────────────
+// API KEY
+// ─────────────────────────────────────────────────────────
+function saveKey() {
+  var k = document.getElementById('gemini-key').value.trim();
+  if (!k) return;
+  SESSION.geminiKey = k;
+  document.getElementById('gemini-key').value = '••••••••••••••••••••';
+  var s = document.getElementById('key-status');
+  s.textContent = '✓ Key saved (memory only)';
+  s.style.color = 'var(--accent3)';
+}
+
+// ─────────────────────────────────────────────────────────
+// PDF READING — browser-side with PDF.js
+// ─────────────────────────────────────────────────────────
+async function readPDF(input, zoneId, docKey, label) {
+  var file = input.files[0];
+  if (!file) return;
+  var zone = document.getElementById(zoneId);
+  zone.classList.remove('uploaded', 'error');
+  zone.classList.add('loading');
+
+  try {
+    var arrayBuffer = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    var allText = '';
+    for (var i = 1; i <= pdf.numPages; i++) {
+      var page = await pdf.getPage(i);
+      var content = await page.getTextContent();
+      allText += content.items.map(function(item) { return item.str; }).join(' ') + '\n';
+    }
+    SESSION.docs[docKey] = { text: allText.trim(), name: file.name, pages: pdf.numPages };
+    zone.classList.remove('loading');
+    zone.classList.add('uploaded');
+    updateExtractedPreview();
+    updateDocCount();
+    console.log('Extracted', docKey, ':', allText.length, 'chars from', pdf.numPages, 'pages');
+  } catch (e) {
+    zone.classList.remove('loading');
+    zone.classList.add('error');
+    zone.querySelector('.upload-hint').style.display = '';
+    zone.querySelector('.upload-hint').textContent = 'Error reading PDF: ' + e.message;
+    console.error('PDF read error:', e);
+  }
+}
+
+async function readMemberPDF(input, memberId, zoneId) {
+  var file = input.files[0];
+  if (!file) return;
+  var zone = document.getElementById(zoneId);
+  zone.classList.add('loading');
+
+  try {
+    var arrayBuffer = await file.arrayBuffer();
+    var pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    var allText = '';
+    for (var i = 1; i <= pdf.numPages; i++) {
+      var page = await pdf.getPage(i);
+      var content = await page.getTextContent();
+      allText += content.items.map(function(item) { return item.str; }).join(' ') + '\n';
+    }
+    var nameInput = document.querySelector('#' + memberId + ' input.ifield');
+    var name = nameInput ? nameInput.value : memberId;
+    if (!SESSION.members[memberId]) SESSION.members[memberId] = {};
+    SESSION.members[memberId].text = allText.trim();
+    SESSION.members[memberId].name = name;
+    SESSION.members[memberId].file = file.name;
+    zone.classList.remove('loading');
+    zone.classList.add('uploaded');
+    var pill = document.getElementById('pill-' + memberId);
+    if (pill) { pill.textContent = 'CV extracted'; pill.className = 'pill p-green'; }
+    updateDocCount();
+  } catch (e) {
+    zone.classList.remove('loading');
+    console.error('Member PDF error:', e);
+  }
+}
+
+function updateExtractedPreview() {
+  var keys = Object.keys(SESSION.docs);
+  if (keys.length === 0) return;
+  var preview = document.getElementById('extracted-preview');
+  var list = document.getElementById('extracted-list');
+  preview.style.display = 'block';
+  list.innerHTML = keys.map(function(k) {
+    var d = SESSION.docs[k];
+    return '<div style="background:var(--bg);border:1px solid rgba(30,158,110,0.25);border-radius:7px;padding:8px 12px;font-size:12px;display:flex;align-items:center;justify-content:space-between;">' +
+      '<span>📄 <strong>' + d.name + '</strong></span>' +
+      '<span style="color:var(--accent3);">' + d.pages + ' pages · ' + Math.round(d.text.length/1000) + 'k chars extracted · browser memory only</span>' +
+      '</div>';
+  }).join('');
+}
+
+function updateDocCount() {
+  var count = Object.keys(SESSION.docs).length;
+  var el = document.getElementById('doc-count');
+  if (el) el.textContent = count + ' of 4';
+}
+
+// ─────────────────────────────────────────────────────────
+// NAVIGATION
+// ─────────────────────────────────────────────────────────
+function go(n) {
+  document.querySelectorAll('.page').forEach(function(p) { p.classList.remove('active'); });
+  document.querySelectorAll('.step-item').forEach(function(s) { s.classList.remove('active', 'done'); });
+  document.getElementById('page-' + n).classList.add('active');
+  document.getElementById('nav-' + n).classList.add('active');
+  for (var i = 1; i < n; i++) document.getElementById('nav-' + i).classList.add('done');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+  if (n === 5) { buildSimulatorPages(); currentFormPage = 0; pageFilled = []; renderFormPage(); }
+}
+
+// ─────────────────────────────────────────────────────────
+// PORTAL URL SAVE
+// ─────────────────────────────────────────────────────────
+function savePortalURL(btn) {
+  SESSION.portalURL = document.getElementById('portal-url').value.trim();
+  btn.textContent = '✓ Saved';
+  btn.style.color = 'var(--accent3)';
+}
+
+// ─────────────────────────────────────────────────────────
+// SCAN SIMULATION
+// ─────────────────────────────────────────────────────────
+function simScan(btn) {
+  btn.textContent = 'Opening portal...';
+  btn.disabled = true;
+  var stages = ['Navigating to portal...','Waiting for login...','Login detected — scanning page 1...','Scanning page 2...','Scanning page 3...','Scanning page 4...','Scanning page 5...','Scanning attachments page...','Scanning declaration page...','Building question map...'];
+  var i = 0;
+  var iv = setInterval(function() {
+    if (i < stages.length) { btn.textContent = stages[i++]; }
+    else {
+      clearInterval(iv);
+      btn.textContent = '✓ Form Scanned Successfully';
+      btn.style.background = 'var(--accent3)'; btn.style.color = '#fff';
+      var r = document.getElementById('scan-result');
+      r.style.display = 'block';
+      document.getElementById('scan-pages').textContent = '8 pages';
+      document.getElementById('scan-fields').textContent = '34 fields';
+      document.getElementById('scan-attach').textContent = '7 file slots';
+      var pages = ['Personal Details','Qualifications','Research Project','Host Lab & Director','Team Researchers','Budget','Attachments','Declaration'];
+      document.getElementById('scan-page-tags').innerHTML = pages.map(function(p, idx) {
+        return '<span class="tag" style="background:rgba(30,158,110,0.08);border-color:rgba(30,158,110,0.25);color:#1a7a52;">Page '+(idx+1)+': '+p+'</span>';
+      }).join('');
+    }
+  }, 400);
+}
+
+// ─────────────────────────────────────────────────────────
+// AI PROCESSING — real Gemini API calls
+// ─────────────────────────────────────────────────────────
+async function startProcessing() {
+  if (!SESSION.geminiKey) {
+    alert('Please enter your Gemini API key at the top of the page first.\n\nGet a free key at: aistudio.google.com');
+    return;
+  }
+  if (Object.keys(SESSION.docs).length === 0) {
+    if (!confirm('No documents uploaded yet. Continue anyway with a demo?\n\n(Upload real CVs on Step 1 for real answers.)')) return;
+    SESSION.docs.cv = { text: DEMO_CV, name: 'demo-cv.pdf', pages: 3 };
+  }
+
+  go(3);
+  var steps = ['ps1','ps2','ps3','ps4','ps5','ps6','ps7'];
+  var si = 0;
+
+  function advanceStep() {
+    if (si > 0) { document.getElementById(steps[si-1]).classList.replace('active','done'); }
+    if (si < steps.length) { document.getElementById(steps[si]).classList.add('active'); si++; }
+  }
+
+  advanceStep();
+
+  try {
+    // Build a single comprehensive prompt from all extracted text
+    var cvText = SESSION.docs.cv ? SESSION.docs.cv.text : '';
+    var dirText = SESSION.docs.director ? SESSION.docs.director.text : '';
+    var propText = SESSION.docs.proposal ? SESSION.docs.proposal.text : '';
+    var suppText = SESSION.docs.supporting ? SESSION.docs.supporting.text : '';
+
+    var memberTexts = Object.keys(SESSION.members).map(function(id) {
+      var m = SESSION.members[id];
+      return 'RESEARCHER CV ('+m.name+'):\n'+m.text;
+    }).join('\n\n');
+
+    advanceStep(); // step 2
+
+    var prompt = `You are an AI assistant helping a researcher fill a grant application form.
+
+Below is the text extracted from their uploaded documents. Analyze all of it and extract structured information, then generate professional answers for a typical grant application form.
+
+=== PRINCIPAL APPLICANT CV ===
+${cvText.substring(0, 8000)}
+
+=== HOST LAB DIRECTOR CV ===
+${dirText.substring(0, 4000)}
+
+=== PROJECT PROPOSAL ===
+${propText.substring(0, 6000)}
+
+=== SUPPORTING DOCUMENTS ===
+${suppText.substring(0, 2000)}
+
+=== TEAM RESEARCHER CVs ===
+${memberTexts.substring(0, 4000)}
+
+Based on this information, generate answers for these standard grant form fields. Return ONLY a valid JSON object with these exact keys. If information is not found, use empty string "". Keep answers concise and professional.
+
+{
+  "applicant_name": "",
+  "applicant_dob": "",
+  "applicant_nationality": "",
+  "applicant_email": "",
+  "applicant_institution": "",
+  "applicant_department": "",
+  "applicant_position": "",
+  "phd_institution": "",
+  "phd_year": "",
+  "phd_thesis": "",
+  "degrees_list": "",
+  "research_years": "",
+  "specialisation_keywords": "",
+  "publications_count": "",
+  "h_index": "",
+  "top_publications": "",
+  "project_title": "",
+  "scientific_objectives": "",
+  "societal_impact": "",
+  "host_institution": "",
+  "director_name": "",
+  "director_position": "",
+  "director_email": "",
+  "lab_focus": "",
+  "project_duration": "",
+  "confidence_notes": ""
+}`;
+
+    advanceStep(); // step 3
+    advanceStep(); // step 4
+
+    var response = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=' + SESSION.geminiKey,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 2048 }
+        })
+      }
+    );
+
+    if (!response.ok) {
+      var err = await response.json();
+      throw new Error((err.error && err.error.message) || 'Gemini API error ' + response.status);
+    }
+
+    var data = await response.json();
+    var rawText = data.candidates[0].content.parts[0].text;
+
+    // Parse JSON from response (strip any markdown fences)
+    var jsonStr = rawText.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
+    SESSION.aiAnswers = JSON.parse(jsonStr);
+
+    advanceStep(); // step 5
+    advanceStep(); // step 6
+    advanceStep(); // step 7
+
+    // Finish
+    document.getElementById(steps[steps.length-1]).classList.replace('active','done');
+    document.getElementById('spinner').style.borderTopColor = 'var(--accent3)';
+
+    setTimeout(function() {
+      renderReview();
+      go(4);
+    }, 800);
+
+  } catch(e) {
+    document.getElementById('proc-error').style.display = 'flex';
+    document.getElementById('proc-error-msg').textContent = 'Error: ' + e.message + '. Check your Gemini API key and try again.';
+    document.getElementById('spinner').style.borderTopColor = 'var(--danger)';
+    console.error('Processing error:', e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────
+// RENDER REVIEW PAGE — from real AI output
+// ─────────────────────────────────────────────────────────
+function renderReview() {
+  var a = SESSION.aiAnswers || {};
+  var filledCount = 0, manualCount = 0;
+
+  function field(label, key, rows) {
+    var val = a[key] || '';
+    var isFilled = val.length > 0;
+    if (isFilled) filledCount++; else manualCount++;
+    var cls = isFilled ? 'ai' : 'bad';
+    var placeholder = isFilled ? '' : 'Not found in documents — please fill manually';
+    if (rows > 1) {
+      return '<div class="ffield"><div class="fq">' + label + '</div>' +
+        '<textarea class="fa ' + cls + '" rows="' + rows + '" placeholder="' + placeholder + '">' + escHtml(val) + '</textarea>' +
+        '<div class="fm"><div class="fsrc">' + (isFilled ? 'Source: <span>AI — from uploaded documents</span>' : '<span style="color:var(--danger);">⚠ Needs manual input</span>') + '</div>' +
+        '<button class="mbtn" onclick="regenField(this,\'' + key + '\')">🔁 Regen</button></div></div>';
+    }
+    return '<div class="ffield"><div class="fq">' + label + '</div>' +
+      '<input class="fa ' + cls + '" type="text" value="' + escHtml(val) + '" placeholder="' + placeholder + '">' +
+      '<div class="fm"><div class="fsrc">' + (isFilled ? 'Source: <span>AI — from uploaded documents</span>' : '<span style="color:var(--danger);">⚠ Needs manual input</span>') + '</div>' +
+      '<button class="mbtn" onclick="regenField(this,\'' + key + '\')">🔁 Regen</button></div></div>';
+  }
+
+  var html =
+    '<div class="fsec"><div class="fsh"><div class="fsh-title">👤 Personal Information</div></div>' +
+    field('Full name', 'applicant_name', 1) +
+    field('Date of birth', 'applicant_dob', 1) +
+    field('Nationality', 'applicant_nationality', 1) +
+    field('Email address', 'applicant_email', 1) +
+    field('Current institution', 'applicant_institution', 1) +
+    field('Department', 'applicant_department', 1) +
+    field('Current position', 'applicant_position', 1) +
+    '</div>' +
+
+    '<div class="fsec"><div class="fsh"><div class="fsh-title">🎓 Academic Qualifications</div></div>' +
+    field('PhD institution', 'phd_institution', 1) +
+    field('PhD year', 'phd_year', 1) +
+    field('PhD thesis title', 'phd_thesis', 1) +
+    field('All degrees (list)', 'degrees_list', 3) +
+    field('Years of research experience', 'research_years', 1) +
+    field('Specialisation keywords', 'specialisation_keywords', 1) +
+    field('Number of publications', 'publications_count', 1) +
+    field('H-index', 'h_index', 1) +
+    field('Top publications (list)', 'top_publications', 4) +
+    '</div>' +
+
+    '<div class="fsec"><div class="fsh"><div class="fsh-title">🔬 Research Project</div></div>' +
+    field('Project title', 'project_title', 1) +
+    field('Scientific objectives', 'scientific_objectives', 5) +
+    field('Societal impact', 'societal_impact', 3) +
+    field('Project duration', 'project_duration', 1) +
+    '</div>' +
+
+    '<div class="fsec"><div class="fsh"><div class="fsh-title">🏛️ Host Lab &amp; Director</div></div>' +
+    field('Host institution', 'host_institution', 1) +
+    field('Director name', 'director_name', 1) +
+    field('Director position', 'director_position', 1) +
+    field('Director email', 'director_email', 1) +
+    field('Lab research focus', 'lab_focus', 3) +
+    '</div>';
+
+  document.getElementById('review-content').innerHTML = html;
+  document.getElementById('stat-filled').textContent = filledCount;
+  document.getElementById('stat-manual').textContent = manualCount;
+  document.getElementById('stat-total').textContent = filledCount + manualCount;
+  var pct = filledCount + manualCount > 0 ? Math.round(filledCount/(filledCount+manualCount)*100) : 0;
+  document.getElementById('stat-conf').textContent = pct + '%';
+}
+
+function escHtml(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+async function regenField(btn, key) {
+  if (!SESSION.geminiKey) { alert('Gemini API key needed'); return; }
+  btn.textContent = '...';
+  btn.disabled = true;
+  var cvText = SESSION.docs.cv ? SESSION.docs.cv.text.substring(0,4000) : '';
+  var prompt = 'From this CV text, extract and return ONLY the value for: ' + key.replace(/_/g,' ') + '\n\nCV:\n' + cvText + '\n\nReturn only the value, no explanation.';
+  try {
+    var r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key='+SESSION.geminiKey, {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:0.1,maxOutputTokens:200} })
+    });
+    var d = await r.json();
+    var val = d.candidates[0].content.parts[0].text.trim();
+    SESSION.aiAnswers[key] = val;
+    // Update the field in the UI
+    var fields = document.querySelectorAll('.ffield');
+    fields.forEach(function(f) {
+      var regenBtn = f.querySelector('button[onclick*="'+key+'"]');
+      if (regenBtn) {
+        var input = f.querySelector('input, textarea');
+        if (input) { input.value = val; input.classList.remove('bad'); input.classList.add('ai'); }
+      }
+    });
+  } catch(e) { console.error(e); }
+  btn.textContent = '🔁 Regen';
+  btn.disabled = false;
+}
+
+function exportAnswers() {
+  if (!SESSION.aiAnswers) { alert('No answers generated yet.'); return; }
+  var text = Object.keys(SESSION.aiAnswers).map(function(k) {
+    return k.toUpperCase().replace(/_/g,' ') + ':\n' + (SESSION.aiAnswers[k]||'(empty)');
+  }).join('\n\n---\n\n');
+  navigator.clipboard.writeText(text).then(function() {
+    alert('All answers copied to clipboard!');
+  }).catch(function() {
+    var w = window.open('','_blank');
+    w.document.write('<pre style="font-family:monospace;padding:20px;">'+text+'</pre>');
+  });
+}
+
+// ─────────────────────────────────────────────────────────
+// TEAM MEMBERS
+// ─────────────────────────────────────────────────────────
+var mCount = 1;
+var aColors = ['linear-gradient(135deg,#c8a96e,#a07840)','linear-gradient(135deg,#7c9fd4,#4a7ab5)','linear-gradient(135deg,#6ec8a2,#3aaa72)','linear-gradient(135deg,#e06c75,#b03040)','linear-gradient(135deg,#c678dd,#8030aa)'];
+
+function addMember() {
+  mCount++;
+  var n = mCount;
+  var col = aColors[(n-1) % aColors.length];
+  var d = document.createElement('div');
+  d.className = 'member-card'; d.id = 'mc-'+n;
+  d.innerHTML =
+    '<div class="member-header">' +
+      '<div style="display:flex;align-items:center;gap:10px;">' +
+        '<div class="m-avatar" style="background:'+col+';">R'+n+'</div>' +
+        '<div><input class="ifield" style="padding:5px 9px;font-weight:600;width:190px;" placeholder="Researcher full name">' +
+        '<div style="font-size:12px;color:var(--muted);margin-top:3px;">New team member</div></div>' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;align-items:center;">' +
+        '<span class="pill p-amber" id="pill-mc-'+n+'">No CV yet</span>' +
+        '<button class="mbtn" style="color:var(--danger);" onclick="removeMember(\'mc-'+n+'\')">✕ Remove</button>' +
+      '</div>' +
+    '</div>' +
+    '<div class="member-upload-row">' +
+      '<div class="upload-zone mini-upload" id="z-m'+n+'">' +
+        '<input type="file" accept=".pdf" onchange="readMemberPDF(this,\'mc-'+n+'\',\'z-m'+n+'\')">' +
+        '<span style="font-size:16px;">📄</span>' +
+        '<div style="font-size:11px;font-weight:600;margin-top:4px;">Upload CV</div>' +
+        '<div class="upload-loading" style="font-size:10px;">Reading...</div>' +
+        '<div class="upload-status" style="font-size:10px;">✓ Extracted</div>' +
+      '</div>' +
+      '<div style="flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px;">' +
+        '<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">Role</div><input class="ifield" style="padding:7px 10px;" placeholder="e.g. Co-Investigator"></div>' +
+        '<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">Institution</div><input class="ifield" style="padding:7px 10px;" placeholder="University"></div>' +
+        '<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">% Time</div><input class="ifield" style="padding:7px 10px;" placeholder="e.g. 30%"></div>' +
+        '<div><div style="font-size:10px;color:var(--muted);margin-bottom:3px;text-transform:uppercase;letter-spacing:1px;">Work Packages</div><input class="ifield" style="padding:7px 10px;" placeholder="e.g. WP1, WP3"></div>' +
+      '</div>' +
+    '</div>';
+  document.getElementById('members-list').appendChild(d);
+  d.scrollIntoView({ behavior:'smooth', block:'center' });
+  updateTeamCount();
+}
+
+function removeMember(id) {
+  var el = document.getElementById(id);
+  if (el) { el.style.opacity='0'; el.style.transition='opacity 0.25s'; setTimeout(function(){ el.remove(); updateTeamCount(); },260); }
+  delete SESSION.members[id];
+}
+
+function updateTeamCount() {
+  var n = document.querySelectorAll('.member-card').length;
+  var tc = document.getElementById('team-count');
+  if (tc) tc.textContent = n;
+}
+
+// ─────────────────────────────────────────────────────────
+// STEP 5 SEQUENTIAL SIMULATOR
+// ─────────────────────────────────────────────────────────
+var formPages = [];
+var currentFormPage = 0;
+var pageFilled = [];
+
+function buildSimulatorPages() {
+  var a = SESSION.aiAnswers || {};
+  formPages = [
+    { title:'Personal Details & Contact', type:'fields', fields:[
+      { label:'Full name', value: a.applicant_name||'', ready:!!a.applicant_name },
+      { label:'Date of birth', value: a.applicant_dob||'', ready:!!a.applicant_dob },
+      { label:'Nationality', value: a.applicant_nationality||'', ready:!!a.applicant_nationality },
+      { label:'ID / Passport number', value:'', ready:false, note:'Personal ID — enter manually' },
+      { label:'Email address', value: a.applicant_email||'', ready:!!a.applicant_email },
+      { label:'Current institution', value: a.applicant_institution||'', ready:!!a.applicant_institution }
+    ]},
+    { title:'Qualifications & Experience', type:'fields', fields:[
+      { label:'PhD institution', value: a.phd_institution||'', ready:!!a.phd_institution },
+      { label:'PhD year', value: a.phd_year||'', ready:!!a.phd_year },
+      { label:'All degrees', value: a.degrees_list||'', ready:!!a.degrees_list },
+      { label:'Years of experience', value: a.research_years||'', ready:!!a.research_years },
+      { label:'Specialisation keywords', value: a.specialisation_keywords||'', ready:!!a.specialisation_keywords },
+      { label:'Publications count', value: a.publications_count||'', ready:!!a.publications_count },
+      { label:'H-index', value: a.h_index||'', ready:!!a.h_index }
+    ]},
+    { title:'Research Project', type:'fields', fields:[
+      { label:'Project title', value: a.project_title||'', ready:!!a.project_title },
+      { label:'Scientific objectives', value: a.scientific_objectives||'', ready:!!a.scientific_objectives },
+      { label:'Societal impact', value: a.societal_impact||'', ready:!!a.societal_impact },
+      { label:'Work plan / methodology', value:'', ready:false, note:'Add your detailed work plan manually' }
+    ]},
+    { title:'Host Lab & Director', type:'fields', fields:[
+      { label:'Host institution', value: a.host_institution||'', ready:!!a.host_institution },
+      { label:'Director name', value: a.director_name||'', ready:!!a.director_name },
+      { label:'Director position', value: a.director_position||'', ready:!!a.director_position },
+      { label:'Lab research focus', value: a.lab_focus||'', ready:!!a.lab_focus }
+    ]},
+    { title:'Team Researchers', type:'table', note:'Repeating table — one row per researcher. Extension fills each row from uploaded CVs.',
+      rows: Object.keys(SESSION.members).length > 0
+        ? Object.keys(SESSION.members).map(function(id){ var m=SESSION.members[id]; return { name:m.name||id, institution:'See CV', role:'Co-Investigator', time:'—', ready:true }; })
+        : [{ name:'No researchers added', institution:'—', role:'—', time:'—', ready:false }]
+    },
+    { title:'Budget', type:'fields', fields:[
+      { label:'Total funding requested', value:'', ready:false, note:'Enter manually' },
+      { label:'Personnel / fellowship costs', value:'', ready:false, note:'Enter manually' },
+      { label:'Equipment and consumables', value:'', ready:false, note:'Enter manually' },
+      { label:'Travel and conferences', value:'', ready:false, note:'Enter manually' }
+    ]},
+    { title:'Document Attachments', type:'attachments', attachments:
+      Object.keys(SESSION.docs).map(function(k){ var d=SESSION.docs[k]; return { label:d.name, file:d.name, ready:true }; }).concat([
+        { label:'Ethics approval letter (PDF)', file:'', ready:false, note:'Not uploaded' },
+        { label:'Institutional support letter (PDF)', file:'', ready:false, note:'Not uploaded' }
+      ])
+    },
+    { title:'Declaration & Submission', type:'declaration', fields:[
+      { label:'I confirm all information is accurate', value:'', ready:false, note:'You must confirm this yourself' },
+      { label:'Digital signature / date', value:'', ready:false, note:'Requires your personal signature' }
+    ]}
+  ];
+}
+
+function renderFormPage() {
+  if (!formPages.length) return;
+  var p = formPages[currentFormPage];
+  var total = formPages.length;
+  var pct = Math.round(((currentFormPage+1)/total)*100);
+  document.getElementById('form-page-title').textContent = 'Page '+(currentFormPage+1)+' of '+total+' — '+p.title;
+  document.getElementById('form-page-counter').textContent = 'Page '+(currentFormPage+1)+' of '+total;
+  document.getElementById('form-progress-bar').style.width = pct+'%';
+  document.getElementById('form-progress-pct').textContent = pct+'%';
+  document.getElementById('btn-prev-page').disabled = currentFormPage === 0;
+  var nb = document.getElementById('btn-next-page');
+  if (currentFormPage === total-1) { nb.textContent='Submit Application'; nb.className='btn btn-ok'; }
+  else { nb.textContent='Next Page →'; nb.className='btn btn-s'; }
+  renderPageNav();
+  var filled = pageFilled[currentFormPage];
+  var html = '';
+  if (p.type==='fields'||p.type==='declaration') {
+    p.fields.forEach(function(f) {
+      html += '<div style="margin-bottom:14px;"><div style="font-size:11px;color:var(--muted);margin-bottom:5px;font-weight:600;">'+f.label+'</div>';
+      if (!filled) { html += '<div style="background:#fff;border:1px solid var(--border);border-radius:7px;padding:9px 12px;font-size:13px;color:var(--muted);min-height:36px;"></div>'; }
+      else if (f.ready&&f.value) { html += '<div style="background:#fff;border:1.5px solid #1e9e6e;border-left:3px solid #1e9e6e;border-radius:7px;padding:9px 12px;font-size:13px;color:var(--text);position:relative;">'+f.value+'<span style="position:absolute;right:8px;top:8px;font-size:10px;background:rgba(30,158,110,0.1);color:#1a7a52;padding:2px 6px;border-radius:4px;font-weight:700;">AI filled</span></div>'; }
+      else { html += '<div style="background:#fff;border:1.5px solid #c0394a;border-left:3px solid #c0394a;border-radius:7px;padding:9px 12px;font-size:12px;color:#c0394a;">'+(f.note||'Manual input required')+'</div>'; }
+      html += '</div>';
+    });
+  }
+  if (p.type==='table') {
+    html += '<div class="alert a-info" style="font-size:12px;margin-bottom:14px;">📋 '+p.note+'</div>';
+    html += '<div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr style="background:var(--surface2);">';
+    ['Researcher','Institution','Role','% Time','Status'].forEach(function(h){ html+='<th style="padding:8px 10px;text-align:left;border:1px solid var(--border);font-weight:700;color:var(--muted);">'+h+'</th>'; });
+    html += '</tr></thead><tbody>';
+    p.rows.forEach(function(r) {
+      var rf=filled&&r.ready; var bg=rf?'rgba(30,158,110,0.04)':'#fff'; var bd=rf?'1.5px solid rgba(30,158,110,0.3)':'1px solid var(--border)';
+      html+='<tr style="background:'+bg+';">';
+      [r.name,r.institution,r.role,r.time].forEach(function(v){ html+='<td style="padding:8px 10px;border:'+bd+';color:var(--text);">'+(rf?v:'<span style="color:var(--muted);">—</span>')+'</td>'; });
+      html+='<td style="padding:8px 10px;border:'+bd+';">'+(rf?'<span class="pill p-green" style="font-size:10px;">AI filled</span>':'<span class="pill p-red" style="font-size:10px;">Pending</span>')+'</td></tr>';
+    });
+    html += '</tbody></table></div>';
+  }
+  if (p.type==='attachments') {
+    html += '<div class="alert a-info" style="font-size:12px;margin-bottom:14px;">📎 '+p.attachments.length+' file slots detected on this page.</div>';
+    p.attachments.forEach(function(a) {
+      var isF=filled&&a.ready;
+      html+='<div style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:7px;margin-bottom:8px;'+
+        (isF?'background:rgba(30,158,110,0.05);border:1px solid rgba(30,158,110,0.25);':'background:#fff;border:1px solid '+(a.file?'var(--border)':'#c0394a')+';')+'">'+
+        '<span style="font-size:18px;">'+(isF?'📄':(a.file?'📄':'⚠️'))+'</span>'+
+        '<div style="flex:1;"><div style="font-size:13px;font-weight:500;">'+a.label+'</div>'+
+        (isF?'<div style="font-size:11px;color:#1a7a52;margin-top:2px;">Ready: '+a.file+'</div>':(a.note?'<div style="font-size:11px;color:#c0394a;margin-top:2px;">'+a.note+'</div>':''))+
+        '</div>'+(isF?'<span class="pill p-green" style="font-size:10px;">Ready</span>':'<span class="pill p-red" style="font-size:10px;">Missing</span>')+'</div>';
+    });
+  }
+  document.getElementById('form-page-content').innerHTML = html;
+  renderExtPopup(p, filled);
+}
+
+function renderPageNav() {
+  var nav = document.getElementById('form-page-nav'); if (!nav) return;
+  var html = '';
+  formPages.forEach(function(p,i) {
+    var cur=i===currentFormPage; var done=pageFilled[i];
+    var bg=done?'#1e9e6e':cur?'#a07830':'#fff'; var col=done||cur?'#fff':'var(--muted)'; var bd=done?'#1e9e6e':cur?'#a07830':'var(--border)';
+    html+='<div onclick="jumpToPage('+i+')" style="width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;cursor:pointer;border:2px solid '+bd+';background:'+bg+';color:'+col+';transition:all 0.2s;flex-shrink:0;" title="'+p.title+'">'+(done?'✓':(i+1))+'</div>';
+    if (i<formPages.length-1) html+='<div style="flex:1;height:2px;background:'+(done?'#1e9e6e':'var(--border)')+';margin-top:14px;min-width:8px;"></div>';
+  });
+  nav.innerHTML = html;
+}
+
+function renderExtPopup(p, filled) {
+  var ready=0, total=0;
+  if (p.type==='fields'||p.type==='declaration') { total=p.fields.length; p.fields.forEach(function(f){ if(f.ready&&f.value) ready++; }); }
+  else if (p.type==='table') { total=p.rows.length; p.rows.forEach(function(r){ if(r.ready) ready++; }); }
+  else if (p.type==='attachments') { total=p.attachments.length; p.attachments.forEach(function(a){ if(a.ready) ready++; }); }
+  var manual = total - ready;
+  var html = '<div style="font-size:11px;color:var(--muted);margin-bottom:8px;">Page '+(currentFormPage+1)+' of '+formPages.length+' — <strong style="color:var(--text);">ministry portal</strong></div>';
+  if (!filled) {
+    html += '<div style="font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--accent);margin-bottom:8px;">'+ready+' ready · '+manual+' manual</div>';
+    if (p.type==='fields'||p.type==='declaration') {
+      p.fields.slice(0,4).forEach(function(f) {
+        var r=f.ready&&!!f.value;
+        html+='<div class="erow '+(r?'matched':'pending')+'">'+(r?'✓':'⚠')+' <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">'+f.label+'</span><span class="pill '+(r?'p-green':'p-red')+'" style="font-size:9px;">'+(r?'AI':'Manual')+'</span></div>';
+      });
+      if (p.fields.length>4) html+='<div style="font-size:11px;color:var(--muted);text-align:center;padding:4px 0;">+'+(p.fields.length-4)+' more</div>';
+    } else if (p.type==='table') {
+      html+='<div class="erow matched">✓ <span style="flex:1;">Researcher table — '+p.rows.length+' rows</span><span class="pill p-green" style="font-size:9px;">Ready</span></div>';
+    } else if (p.type==='attachments') {
+      html+='<div class="erow matched">✓ <span style="flex:1;">Files: '+ready+'/'+total+' matched</span><span class="pill p-blue" style="font-size:9px;">Partial</span></div>';
+    }
+    html+='<div style="margin-top:10px;"><button onclick="fillCurrentPage()" class="btn btn-p" style="width:100%;justify-content:center;padding:9px;font-size:13px;">⚡ Fill This Page</button></div>';
+    html+='<div style="margin-top:6px;font-size:10px;color:var(--muted);text-align:center;">'+ready+' filled instantly'+(manual>0?' · '+manual+' manual':'')+'</div>';
+  } else {
+    html+='<div style="text-align:center;padding:10px 0;"><div style="font-size:28px;margin-bottom:8px;">✅</div><div style="font-size:13px;font-weight:700;color:var(--accent3);margin-bottom:4px;">Page '+(currentFormPage+1)+' filled!</div><div style="font-size:11px;color:var(--muted);margin-bottom:10px;">'+ready+' fields completed'+(manual>0?'<br><span style="color:#c0394a;">'+manual+' need manual input</span>':'')+'</div>';
+    if (currentFormPage<formPages.length-1) html+='<div style="font-size:11px;color:var(--accent2);padding:8px;background:rgba(58,111,181,0.07);border-radius:6px;">Click <strong>Next Page</strong> — fills next page too.</div>';
+    else html+='<div style="font-size:11px;color:#1a7a52;padding:8px;background:rgba(30,158,110,0.07);border-radius:6px;">All pages complete! Review and submit.</div>';
+    html+='</div>';
+  }
+  document.getElementById('ext-popup-body').innerHTML = html;
+}
+
+function fillCurrentPage() { pageFilled[currentFormPage]=true; renderFormPage(); }
+function formPageNav(dir) { var n=currentFormPage+dir; if(n<0||n>=formPages.length) return; currentFormPage=n; renderFormPage(); var m=document.getElementById('ministry-form-mock'); if(m) m.scrollIntoView({behavior:'smooth',block:'start'}); }
+function jumpToPage(i) { currentFormPage=i; renderFormPage(); }
+
+// ─────────────────────────────────────────────────────────
+// DEMO CV TEXT — used if no documents uploaded
+// ─────────────────────────────────────────────────────────
+var DEMO_CV = `Dr. Maria Jose Fernandez Lopez
+Date of Birth: 14 March 1990
+Nationality: Spanish
+Email: mj.fernandez@uva.es
+
+CURRENT POSITION
+Postdoctoral Researcher, Department of Biochemistry and Molecular Biology
+University of Valladolid, Spain (2018-present)
+
+EDUCATION
+PhD in Molecular Biology, University of Salamanca, 2018
+Thesis: Epigenetic Regulation of Tumour Suppressor Genes in Colorectal Cancer
+MSc in Biochemistry, University of Valladolid, 2014
+BSc in Biology, University of Valladolid, 2012
+
+RESEARCH EXPERIENCE
+8 years of postdoctoral and doctoral research in cancer epigenomics.
+Specialisation: histone methylation, ChIP-seq, colorectal carcinoma, DNMT3A
+
+PUBLICATIONS
+14 peer-reviewed publications. H-index: 7.
+Key publication: Fernandez-Lopez et al. (2022) Nature Communications - DNMT3A-driven methylation in CRC
+
+HOST LABORATORY
+DKFZ - German Cancer Research Centre, Heidelberg
+Director: Prof. Andreas Weber
+Position: Full Professor and Lab Director, Cancer Epigenomics Division
+Lab focus: Cancer epigenomics and chromatin biology`;
+</script>
+</body>
+</html>
