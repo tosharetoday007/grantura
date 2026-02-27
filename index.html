@@ -491,31 +491,54 @@ header {
 ════════════════════════════════════════════════════ -->
 <div class="page" id="page-4">
   <h1 class="page-title">Review &amp; <span>Refine</span></h1>
-  <p class="page-sub">AI-generated answers from your documents. Edit any field, regenerate individual answers, or add missing information. Red fields need your input.</p>
+  <p class="page-sub">Two sections: your CV-based answers for standard grant fields, and results from the last form the extension filled. Use both to review, correct, and prepare.</p>
 
-  <div class="stats-bar">
-    <div class="stat-card"><div class="stat-num" style="color:var(--accent3);" id="stat-filled">0</div><div class="stat-lbl">AI-filled fields</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--danger);" id="stat-manual">0</div><div class="stat-lbl">Need your input</div></div>
-    <div class="stat-card"><div class="stat-num" style="color:var(--accent2);" id="stat-conf">—</div><div class="stat-lbl">Confidence</div></div>
-    <div class="stat-card"><div class="stat-num" id="stat-total">0</div><div class="stat-lbl">Total fields</div></div>
+  <!-- TAB SWITCHER -->
+  <div style="display:flex;background:#f1f3f8;border-radius:10px;padding:3px;gap:3px;margin-bottom:20px;">
+    <button id="rv-tab0" onclick="rvTab(0)" style="flex:1;padding:9px;border-radius:8px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:#a07830;color:white;transition:all 0.2s;">
+      📄 Document Answers
+    </button>
+    <button id="rv-tab1" onclick="rvTab(1)" style="flex:1;padding:9px;border-radius:8px;border:none;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;background:transparent;color:#6b6f82;transition:all 0.2s;">
+      📋 Last Form Results
+    </button>
   </div>
 
-  <!-- AI answers rendered here dynamically -->
-  <div id="review-content">
-    <div class="alert a-info">🧠 <div>AI answers will appear here after processing. Go back to Step 2 and click "Prepare All Answers" to generate them.</div></div>
+  <!-- SECTION A: DOCUMENT ANSWERS -->
+  <div id="rv-pane0">
+    <div class="alert a-blue" style="margin-bottom:16px;font-size:12px;">
+      💡 These answers are prepared from your uploaded CV and documents. They are your <strong>reference answers</strong> — the extension uses them when filling any form. Edit any answer here and click Save to update.
+    </div>
+    <div class="stats-bar" style="margin-bottom:16px;">
+      <div class="stat-card"><div class="stat-num" style="color:var(--accent3);" id="stat-filled">0</div><div class="stat-lbl">AI filled</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--danger);" id="stat-manual">0</div><div class="stat-lbl">Need input</div></div>
+      <div class="stat-card"><div class="stat-num" style="color:var(--accent2);" id="stat-conf">—</div><div class="stat-lbl">Confidence</div></div>
+      <div class="stat-card"><div class="stat-num" id="stat-total">0</div><div class="stat-lbl">Total</div></div>
+    </div>
+    <div id="review-content">
+      <div class="alert a-info">🧠 Go to Step 2 and click "Prepare All Answers" to generate AI answers from your documents.</div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;">
+      <button class="btn btn-s" onclick="exportAnswers()" style="flex:1;">📋 Copy All Answers</button>
+      <button class="btn btn-p" onclick="go(2)" style="flex:1;">↩ Re-process Documents</button>
+    </div>
   </div>
 
-  <div class="btn-row" style="margin-top:28px;">
+  <!-- SECTION B: LAST FORM RESULTS -->
+  <div id="rv-pane1" style="display:none;">
+    <div class="alert a-blue" style="margin-bottom:16px;font-size:12px;">
+      📋 Results from the last form the extension filled. Use these to correct any fields that need manual input.
+    </div>
+    <div id="rv-form-results">
+      <div class="alert a-info">No form results yet. Go to any form, let the extension fill it, then come back here to see results.</div>
+    </div>
+  </div>
+
+  <div class="btn-row" style="margin-top:20px;">
     <button class="btn btn-g" onclick="go(2)">← Back</button>
-    <button class="btn btn-s" onclick="exportAnswers()">📋 Copy All Answers</button>
     <button class="btn btn-ok" onclick="go(5)">✅ Proceed to Extension Fill →</button>
   </div>
 </div>
 
-
-<!-- ═══════════════════════════════════════════════════
-     PAGE 5 — EXTENSION FILL (sequential simulator)
-════════════════════════════════════════════════════ -->
 <div class="page" id="page-5">
   <h1 class="page-title">Fill with the <span>Browser Extension</span></h1>
   <p class="page-sub">Your answers are prepared. The Grantura extension fills the ministry form page by page — each time you click Next in the portal, it fills the next page automatically too.</p>
@@ -604,7 +627,9 @@ var SESSION = {
   docs: {}, // { cv: "text...", director: "text...", proposal: "text...", supporting: "text..." }
   members: {}, // { 'mc-1': { name: '...', text: '...' } }
   portalURL: '',
-  aiAnswers: null // populated after Gemini processing
+  aiAnswers: null,        // populated after AI processing
+  lastFormResults: null,  // populated after extension fills a form
+  corrections: {}         // manual corrections from review page
 };
 
 // ─────────────────────────────────────────────────────────
@@ -1332,6 +1357,139 @@ function showSendResult(ok, msg) {
     r.innerHTML = '<div class="alert a-warn">⚠ ' + msg + '</div>';
   }
 }
+
+// ─────────────────────────────────────────────────────────
+// REVIEW TAB SWITCHING
+// ─────────────────────────────────────────────────────────
+function rvTab(n) {
+  document.getElementById('rv-pane0').style.display = n === 0 ? 'block' : 'none';
+  document.getElementById('rv-pane1').style.display = n === 1 ? 'block' : 'none';
+
+  var t0 = document.getElementById('rv-tab0');
+  var t1 = document.getElementById('rv-tab1');
+  if (n === 0) {
+    t0.style.background = '#a07830'; t0.style.color = 'white';
+    t1.style.background = 'transparent'; t1.style.color = '#6b6f82';
+  } else {
+    t1.style.background = '#3a6fb5'; t1.style.color = 'white';
+    t0.style.background = 'transparent'; t0.style.color = '#6b6f82';
+    loadFormResults();
+  }
+}
+
+function loadFormResults() {
+  var el = document.getElementById('rv-form-results');
+  el.innerHTML = '<div class="alert a-info" id="rv-loading">⏳ Loading results from extension...</div>';
+
+  // Try to get results from extension storage via bridge
+  var gotResponse = false;
+
+  function handleMsg(event) {
+    if (!event.data || event.data.source !== 'grantura-extension') return;
+    if (event.data.type !== 'FORM_RESULTS') return;
+    gotResponse = true;
+    window.removeEventListener('message', handleMsg);
+
+    if (event.data.data) {
+      SESSION.lastFormResults = event.data.data.results;
+      SESSION.lastFormUrl     = event.data.data.url;
+      SESSION.lastFormTitle   = event.data.data.title;
+    }
+    renderFormResults();
+  }
+
+  window.addEventListener('message', handleMsg);
+  window.postMessage({ source: 'grantura-webapp', type: 'GET_FORM_RESULTS' }, '*');
+
+  // Timeout fallback
+  setTimeout(function() {
+    if (!gotResponse) {
+      window.removeEventListener('message', handleMsg);
+      renderFormResults();
+    }
+  }, 1500);
+}
+
+function renderFormResults() {
+  var el = document.getElementById('rv-form-results');
+  var results = SESSION.lastFormResults;
+  if (!results || results.length === 0) {
+    el.innerHTML = '<div class="alert a-info">No form results yet. Go to any form, let the extension fill it, then come back here.</div>';
+    return;
+  }
+
+  var filledItems  = results.filter(function(r){ return r.status === 'filled'; });
+  var manualItems  = results.filter(function(r){ return r.status === 'manual'; });
+  var warnItems    = results.filter(function(r){ return r.status === 'warn'; });
+
+  var html = '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:16px;">';
+  html += '<div style="background:rgba(30,158,110,0.08);border:1px solid rgba(30,158,110,0.2);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#1e9e6e;">' + filledItems.length + '</div><div style="font-size:10px;color:#6b6f82;">AI Filled</div></div>';
+  html += '<div style="background:rgba(192,57,74,0.08);border:1px solid rgba(192,57,74,0.2);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#c0394a;">' + manualItems.length + '</div><div style="font-size:10px;color:#6b6f82;">Need Input</div></div>';
+  html += '<div style="background:rgba(255,165,0,0.08);border:1px solid rgba(255,165,0,0.3);border-radius:8px;padding:10px;text-align:center;"><div style="font-size:22px;font-weight:800;color:#e08000;">' + warnItems.length + '</div><div style="font-size:10px;color:#6b6f82;">Corrections</div></div>';
+  html += '</div>';
+
+  // Show each field result
+  results.forEach(function(r) {
+    var bg = r.status === 'filled'
+      ? 'rgba(30,158,110,0.06)'
+      : r.status === 'warn'
+        ? 'rgba(255,165,0,0.06)'
+        : 'rgba(192,57,74,0.06)';
+    var border = r.status === 'filled'
+      ? 'rgba(30,158,110,0.2)'
+      : r.status === 'warn'
+        ? 'rgba(255,165,0,0.3)'
+        : 'rgba(192,57,74,0.2)';
+    var icon = r.status === 'filled' ? '✓' : '⚠';
+    var color = r.status === 'filled' ? '#1e9e6e' : r.status === 'warn' ? '#e08000' : '#c0394a';
+
+    html += '<div style="background:' + bg + ';border:1px solid ' + border + ';border-radius:8px;padding:10px 12px;margin-bottom:8px;">';
+    html += '<div style="display:flex;align-items:flex-start;gap:8px;">';
+    html += '<span style="color:' + color + ';font-weight:700;font-size:14px;flex-shrink:0;">' + icon + '</span>';
+    html += '<div style="flex:1;">';
+    html += '<div style="font-size:12px;font-weight:700;margin-bottom:3px;">' + (r.label || 'Field') + '</div>';
+    if (r.value) {
+      html += '<div style="font-size:12px;color:#3a6fb5;margin-bottom:3px;word-break:break-word;">' + r.value + '</div>';
+    }
+    if (r.note) {
+      html += '<div style="font-size:11px;color:#6b6f82;">' + r.note + '</div>';
+    }
+    if (r.status !== 'filled') {
+      var safeLabel = (r.label||'').replace(/['"]/g,'');
+      html += '<input type="text" placeholder="Type your answer here..." style="width:100%;margin-top:6px;padding:7px 9px;border:1px solid #dde1ec;border-radius:6px;font-size:12px;font-family:inherit;" oninput="SESSION.corrections[\"' + safeLabel + '\"]=this.value">';
+    }
+    html += '</div></div></div>';
+  });
+
+  el.innerHTML = html;
+}
+
+// ─────────────────────────────────────────────────────────
+// LISTEN FOR LIVE RESULTS FROM EXTENSION
+// When extension fills a form, it posts results here
+// ─────────────────────────────────────────────────────────
+window.addEventListener('message', function(event) {
+  if (!event.data || event.data.source !== 'grantura-extension') return;
+
+  if (event.data.type === 'READY') {
+    // Extension detected — show success indicator
+    var btn = document.getElementById('btn-send-ext');
+    if (btn) btn.textContent = '📤 Send to Extension ✓';
+  }
+
+  if (event.data.type === 'FORM_RESULTS') {
+    // Extension just finished filling a form — save results
+    if (event.data.results) {
+      SESSION.lastFormResults = event.data.results;
+      SESSION.lastFormUrl     = event.data.url;
+      SESSION.lastFormTitle   = event.data.title;
+      // If user is on review page, refresh it
+      if (document.getElementById('rv-form-results')) {
+        renderFormResults();
+      }
+    }
+  }
+});
 
 // ─────────────────────────────────────────────────────────
 // DEMO CV TEXT — used if no documents uploaded
