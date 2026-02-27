@@ -371,8 +371,11 @@ header {
     </div>
   </div>
 
+  <div id="send-ext-result" style="display:none;margin-top:12px;"></div>
+
   <div class="btn-row">
-    <button class="btn btn-p" id="btn-to-step2" onclick="go(2)">Continue to Portal Setup →</button>
+    <button class="btn btn-s" id="btn-send-ext" onclick="sendToExtension()">📤 Send to Extension</button>
+    <button class="btn btn-p" id="btn-to-step2" onclick="go(2)">Continue →</button>
   </div>
 </div>
 
@@ -1255,6 +1258,66 @@ function renderExtPopup(p, filled) {
 function fillCurrentPage() { pageFilled[currentFormPage]=true; renderFormPage(); }
 function formPageNav(dir) { var n=currentFormPage+dir; if(n<0||n>=formPages.length) return; currentFormPage=n; renderFormPage(); var m=document.getElementById('ministry-form-mock'); if(m) m.scrollIntoView({behavior:'smooth',block:'start'}); }
 function jumpToPage(i) { currentFormPage=i; renderFormPage(); }
+
+// ─────────────────────────────────────────────────────────
+// SEND DOCUMENTS TO EXTENSION
+// Uses chrome.storage so the extension can access CV text
+// on ANY website the researcher visits
+// ─────────────────────────────────────────────────────────
+function sendToExtension() {
+  var docs = SESSION.docs;
+  var memberDocs = SESSION.members;
+
+  // Merge all docs
+  var allDocs = Object.assign({}, docs);
+  Object.keys(memberDocs).forEach(function(id) {
+    var m = memberDocs[id];
+    if (m.text) allDocs['member_' + id] = { text: m.text, name: m.name || id, pages: 1 };
+  });
+
+  if (Object.keys(allDocs).length === 0) {
+    var r = document.getElementById('send-ext-result');
+    r.style.display = 'block';
+    r.innerHTML = '<div class="alert a-warn">⚠ No documents uploaded yet. Please upload at least one PDF first.</div>';
+    return;
+  }
+
+  // Save API key and provider to extension storage too
+  var settings = {
+    provider: SESSION.provider || 'groq'
+  };
+
+  // Try to write to chrome.storage (only works if extension is installed)
+  try {
+    if (typeof chrome !== 'undefined' && chrome.storage) {
+      chrome.storage.local.set({
+        granturaDocs: allDocs,
+        granturaApiKey: SESSION.geminiKey,
+        granturaSettings: settings
+      }, function() {
+        if (chrome.runtime.lastError) {
+          showSendResult(false, chrome.runtime.lastError.message);
+        } else {
+          showSendResult(true, Object.keys(allDocs).length + ' document(s) sent to extension successfully');
+        }
+      });
+    } else {
+      showSendResult(false, 'Grantura extension not detected. Please install it first.');
+    }
+  } catch(e) {
+    showSendResult(false, 'Extension not found: ' + e.message);
+  }
+}
+
+function showSendResult(ok, msg) {
+  var r = document.getElementById('send-ext-result');
+  r.style.display = 'block';
+  if (ok) {
+    r.innerHTML = '<div class="alert a-green">✅ ' + msg + '<br><strong>Now go to any form on any website</strong> — the Grantura extension sidebar will appear automatically and fill it for you.</div>';
+  } else {
+    r.innerHTML = '<div class="alert a-warn">⚠ ' + msg + '</div>';
+  }
+}
 
 // ─────────────────────────────────────────────────────────
 // DEMO CV TEXT — used if no documents uploaded
