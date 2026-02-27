@@ -1280,31 +1280,44 @@ function sendToExtension() {
     return;
   }
 
-  // Listen for result from bridge
-  function onResult(e) {
-    window.removeEventListener('grantura-send-result', onResult);
-    if (e.detail && e.detail.ok) {
-      showSendResult(true, e.detail.docCount + ' document(s) sent to extension. Now go to any form on any website!');
-    } else {
-      showSendResult(false, (e.detail && e.detail.error) || 'Unknown error');
+  // First check if extension is present via PING
+  var pingTimer = setTimeout(function() {
+    window.removeEventListener('message', onMessage);
+    showSendResult(false, 'Extension not detected. Make sure the Grantura extension is installed and this page is reloaded after installing.');
+  }, 3000);
+
+  function onMessage(event) {
+    if (!event.data || event.data.source !== 'grantura-extension') return;
+
+    if (event.data.type === 'PONG' || event.data.type === 'READY') {
+      // Extension is here — now send docs
+      window.postMessage({
+        source:   'grantura-webapp',
+        type:     'SEND_DOCS',
+        docs:     allDocs,
+        apiKey:   SESSION.geminiKey,
+        provider: SESSION.provider || 'groq'
+      }, '*');
+    }
+
+    if (event.data.type === 'SEND_DOCS_RESULT') {
+      clearTimeout(pingTimer);
+      window.removeEventListener('message', onMessage);
+      if (event.data.ok) {
+        showSendResult(true, event.data.count + ' document(s) sent to extension successfully! Now go to any form on any website.');
+      } else {
+        showSendResult(false, event.data.error || 'Failed to save documents to extension.');
+      }
     }
   }
-  window.addEventListener('grantura-send-result', onResult);
 
-  // Send to bridge.js via CustomEvent
-  window.dispatchEvent(new CustomEvent('grantura-send-docs', {
-    detail: {
-      docs:     allDocs,
-      apiKey:   SESSION.geminiKey,
-      provider: SESSION.provider || 'groq'
-    }
-  }));
+  window.addEventListener('message', onMessage);
 
-  // Timeout if no response in 2 seconds — extension not installed
-  setTimeout(function() {
-    window.removeEventListener('grantura-send-result', onResult);
-    showSendResult(false, 'Extension not detected. Make sure Grantura extension is installed in Edge and reload this page.');
-  }, 2000);
+  // Send ping to check if extension bridge is running
+  window.postMessage({
+    source: 'grantura-webapp',
+    type:   'PING'
+  }, '*');
 }
 
 function showSendResult(ok, msg) {
