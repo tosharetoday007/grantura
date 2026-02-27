@@ -228,10 +228,27 @@ header {
 
 <!-- Gemini API key input — stored only in memory, never sent anywhere except Gemini -->
 <div class="api-banner">
-  <span class="api-banner-label">🔑 Gemini API Key</span>
-  <input type="password" id="gemini-key" placeholder="Paste your free Gemini API key here (aistudio.google.com)">
+  <span class="api-banner-label">🔑 AI Provider</span>
+
+  <!-- Provider toggle -->
+  <div style="display:flex;background:#e8eaf2;border-radius:7px;padding:2px;gap:2px;">
+    <button id="tab-groq" onclick="switchProvider('groq')"
+      style="padding:5px 12px;border-radius:5px;border:none;font-size:11px;font-weight:700;cursor:pointer;background:#3a6fb5;color:white;transition:all 0.2s;">
+      Groq (Llama 3)
+    </button>
+    <button id="tab-gemini" onclick="switchProvider('gemini')"
+      style="padding:5px 12px;border-radius:5px;border:none;font-size:11px;font-weight:700;cursor:pointer;background:transparent;color:#6b6f82;transition:all 0.2s;">
+      Gemini (Google)
+    </button>
+  </div>
+
+  <input type="password" id="gemini-key" placeholder="Paste your free Groq key — console.groq.com" style="max-width:320px;">
   <button class="btn btn-s" style="font-size:12px;padding:7px 14px;" onclick="saveKey()">Save</button>
-  <span class="api-banner-note">Free key · never stored · only used in your browser session · <a href="https://aistudio.google.com/app/apikey" target="_blank" style="color:var(--accent2);">Get free key →</a></span>
+
+  <span id="key-link-note" class="api-banner-note">
+    Free · never stored · session only ·
+    <a id="key-get-link" href="https://console.groq.com" target="_blank" style="color:var(--accent2);">Get free Groq key →</a>
+  </span>
   <span id="key-status" style="font-size:12px;font-weight:600;"></span>
 </div>
 
@@ -445,7 +462,7 @@ header {
     <div class="proc-card">
       <div class="spinner" id="spinner"></div>
       <h2 style="font-family:'DM Serif Display',serif;font-size:22px;margin-bottom:6px;">AI is working on your form</h2>
-      <p style="color:var(--muted);font-size:13px;margin-bottom:28px;" id="proc-subtitle">Sending extracted text to Gemini AI. Your original files stay in your browser.</p>
+      <p style="color:var(--muted);font-size:13px;margin-bottom:28px;" id="proc-subtitle">Sending extracted text to AI. Your original files stay in your browser. Your original files stay in your browser.</p>
       <div>
         <div class="pstep active" id="ps1"><div class="pdot"></div><div>Extracting structure from your CV</div></div>
         <div class="pstep" id="ps2"><div class="pdot"></div><div>Extracting structure from director CV &amp; team CVs</div></div>
@@ -577,6 +594,7 @@ if (typeof pdfjsLib !== 'undefined') {
 // ─────────────────────────────────────────────────────────
 var SESSION = {
   geminiKey: '',
+  provider: 'groq',
   docs: {}, // { cv: "text...", director: "text...", proposal: "text...", supporting: "text..." }
   members: {}, // { 'mc-1': { name: '...', text: '...' } }
   portalURL: '',
@@ -586,13 +604,51 @@ var SESSION = {
 // ─────────────────────────────────────────────────────────
 // API KEY
 // ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────
+// PROVIDER SWITCHING
+// ─────────────────────────────────────────────────────────
+SESSION.provider = 'groq'; // default
+
+function switchProvider(p) {
+  SESSION.provider = p;
+  SESSION.geminiKey = ''; // clear key when switching
+
+  var tabGroq   = document.getElementById('tab-groq');
+  var tabGemini = document.getElementById('tab-gemini');
+  var input     = document.getElementById('gemini-key');
+  var link      = document.getElementById('key-get-link');
+  var status    = document.getElementById('key-status');
+
+  status.textContent = '';
+  input.value = '';
+
+  if (p === 'groq') {
+    tabGroq.style.background   = '#3a6fb5';
+    tabGroq.style.color        = 'white';
+    tabGemini.style.background = 'transparent';
+    tabGemini.style.color      = '#6b6f82';
+    input.placeholder = 'Paste your free Groq key — console.groq.com';
+    link.textContent  = 'Get free Groq key →';
+    link.href         = 'https://console.groq.com';
+  } else {
+    tabGemini.style.background = '#a07830';
+    tabGemini.style.color      = 'white';
+    tabGroq.style.background   = 'transparent';
+    tabGroq.style.color        = '#6b6f82';
+    input.placeholder = 'Paste your Gemini key — aistudio.google.com';
+    link.textContent  = 'Get free Gemini key →';
+    link.href         = 'https://aistudio.google.com/app/apikey';
+  }
+}
+
 function saveKey() {
   var k = document.getElementById('gemini-key').value.trim();
   if (!k) return;
   SESSION.geminiKey = k;
   document.getElementById('gemini-key').value = '••••••••••••••••••••';
   var s = document.getElementById('key-status');
-  s.textContent = '✓ Key saved (memory only)';
+  var provider = SESSION.provider === 'groq' ? 'Groq' : 'Gemini';
+  s.textContent = '✓ ' + provider + ' key saved (memory only)';
   s.style.color = 'var(--accent3)';
 }
 
@@ -735,9 +791,29 @@ function simScan(btn) {
 // ─────────────────────────────────────────────────────────
 // AI PROCESSING — real Gemini API calls
 // ─────────────────────────────────────────────────────────
+// Unified AI call routes to Groq or Gemini based on user selection
+async function callAI(prompt, maxTokens) {
+  if (SESSION.provider === 'gemini') {
+    var r = await fetch(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + SESSION.geminiKey,
+      { method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:0.2,maxOutputTokens:maxTokens||2048} }) }
+    );
+    if (!r.ok) { var e=await r.json(); throw new Error((e.error&&e.error.message)||'Gemini error '+r.status); }
+    var d=await r.json(); return d.candidates[0].content.parts[0].text;
+  } else {
+    var r = await fetch('https://api.groq.com/openai/v1/chat/completions',
+      { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+SESSION.geminiKey},
+        body: JSON.stringify({ model:'llama-3.3-70b-versatile', messages:[{role:'user',content:prompt}], temperature:0.2, max_tokens:maxTokens||2048 }) }
+    );
+    if (!r.ok) { var e=await r.json(); throw new Error((e.error&&e.error.message)||'Groq error '+r.status); }
+    var d=await r.json(); return d.choices[0].message.content;
+  }
+}
+
 async function startProcessing() {
   if (!SESSION.geminiKey) {
-    alert('Please enter your Gemini API key at the top of the page first.\n\nGet a free key at: aistudio.google.com');
+    alert('Please enter your API key at the top of the page first.\n\nGroq (recommended, generous free tier): console.groq.com\nGemini (alternative): aistudio.google.com/app/apikey');
     return;
   }
   if (Object.keys(SESSION.docs).length === 0) {
@@ -757,10 +833,9 @@ async function startProcessing() {
   advanceStep();
 
   try {
-    // Build a single comprehensive prompt from all extracted text
-    var cvText = SESSION.docs.cv ? SESSION.docs.cv.text : '';
-    var dirText = SESSION.docs.director ? SESSION.docs.director.text : '';
-    var propText = SESSION.docs.proposal ? SESSION.docs.proposal.text : '';
+    var cvText   = SESSION.docs.cv         ? SESSION.docs.cv.text         : '';
+    var dirText  = SESSION.docs.director   ? SESSION.docs.director.text   : '';
+    var propText = SESSION.docs.proposal   ? SESSION.docs.proposal.text   : '';
     var suppText = SESSION.docs.supporting ? SESSION.docs.supporting.text : '';
 
     var memberTexts = Object.keys(SESSION.members).map(function(id) {
@@ -823,25 +898,7 @@ Based on this information, generate answers for these standard grant form fields
     advanceStep(); // step 3
     advanceStep(); // step 4
 
-    var response = await fetch(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=' + SESSION.geminiKey,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 2048 }
-        })
-      }
-    );
-
-    if (!response.ok) {
-      var err = await response.json();
-      throw new Error((err.error && err.error.message) || 'Gemini API error ' + response.status);
-    }
-
-    var data = await response.json();
-    var rawText = data.candidates[0].content.parts[0].text;
+    var rawText = await callAI(prompt, 2048);
 
     // Parse JSON from response (strip any markdown fences)
     var jsonStr = rawText.replace(/```json\n?/g,'').replace(/```\n?/g,'').trim();
@@ -862,7 +919,7 @@ Based on this information, generate answers for these standard grant form fields
 
   } catch(e) {
     document.getElementById('proc-error').style.display = 'flex';
-    document.getElementById('proc-error-msg').textContent = 'Error: ' + e.message + '. Check your Gemini API key and try again.';
+    document.getElementById('proc-error-msg').textContent = 'Error: ' + e.message + '. Check your Groq API key and try again.';
     document.getElementById('spinner').style.borderTopColor = 'var(--danger)';
     console.error('Processing error:', e);
   }
@@ -944,18 +1001,13 @@ function escHtml(s) {
 }
 
 async function regenField(btn, key) {
-  if (!SESSION.geminiKey) { alert('Gemini API key needed'); return; }
+  if (!SESSION.geminiKey) { alert('Groq API key needed'); return; }
   btn.textContent = '...';
   btn.disabled = true;
   var cvText = SESSION.docs.cv ? SESSION.docs.cv.text.substring(0,4000) : '';
   var prompt = 'From this CV text, extract and return ONLY the value for: ' + key.replace(/_/g,' ') + '\n\nCV:\n' + cvText + '\n\nReturn only the value, no explanation.';
   try {
-    var r = await fetch('https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+SESSION.geminiKey, {
-      method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:0.1,maxOutputTokens:200} })
-    });
-    var d = await r.json();
-    var val = d.candidates[0].content.parts[0].text.trim();
+    var val = (await callAI(prompt, 200)).trim();
     SESSION.aiAnswers[key] = val;
     // Update the field in the UI
     var fields = document.querySelectorAll('.ffield');
