@@ -409,7 +409,7 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
     <div class="btn-row">
       <button class="btn btn-g" id="refresh-btn" onclick="loadLastResult()">🔄 Refresh Results</button>
       <button class="btn btn-g" id="print-btn"   onclick="window.print()">🖨 Print Answers</button>
-      <button class="btn btn-g" id="xml-btn"     onclick="downloadXML()">⬇ Download XML</button>
+      <button class="btn btn-g" id="csv-btn"     onclick="downloadExcel()">📊 Download Excel</button>
     </div>
   </div>
 
@@ -417,10 +417,11 @@ body{font-family:-apple-system,'Segoe UI',sans-serif;background:var(--bg);color:
   <div class="tab-pane" id="rv-pane1">
     <div class="alert a-blue" style="margin-bottom:14px;font-size:13px;">
       <div>💡</div>
-      <div>These answers come from your uploaded CV. They are what AI uses when filling any form. If something is wrong, update your CV and re-upload on page 2.</div>
+      <div>Click the button below to ask AI to extract your key information from your uploaded CV — name, email, institution, research interests, languages, and more. You can check and correct anything before filling any form.</div>
     </div>
+    <button class="btn btn-p" id="gen-cv-btn" onclick="generateCVAnswers()" style="margin-bottom:14px;">🧠 Generate CV Reference Answers</button>
     <div id="review-content">
-      <div class="alert a-grey"><div>ℹ</div><div>Upload documents on Step 2 to see your CV-based reference answers here.</div></div>
+      <div class="alert a-grey"><div>ℹ</div><div>Upload your CV on Step 2, then click the button above to extract your information.</div></div>
     </div>
   </div>
 
@@ -754,6 +755,192 @@ document.addEventListener('click', function(e) {
     setTimeout(function(){ btn.textContent = '📋 Copy'; }, 1500);
   });
 });
+
+// ── GENERATE CV REFERENCE ANSWERS ────────────────────────
+function generateCVAnswers() {
+  var docs = SESSION.docs;
+  if (!Object.keys(docs).length) {
+    document.getElementById('review-content').innerHTML =
+      '<div class="alert a-amber"><div>⚠</div><div>No documents uploaded yet. Go to <strong>Step 2</strong> and upload your CV first.</div></div>';
+    return;
+  }
+  if (!SESSION.apiKey) {
+    document.getElementById('review-content').innerHTML =
+      '<div class="alert a-amber"><div>⚠</div><div>No API key saved. Go to <strong>Step 1</strong> and save your Groq or Gemini key first.</div></div>';
+    return;
+  }
+
+  var btn = document.getElementById('gen-cv-btn');
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating...';
+  document.getElementById('review-content').innerHTML =
+    '<div style="text-align:center;padding:20px;color:var(--muted);">🧠 AI is reading your CV and extracting your information...<br><br><em>This takes about 10-15 seconds</em></div>';
+
+  var docText = Object.keys(docs).map(function(k) {
+    return '=== ' + (docs[k].name||k).toUpperCase() + ' ===\n' + (docs[k].text||'').substring(0,4000);
+  }).join('\n\n');
+
+  var standardFields = [
+    {label:'Full Name',          type:'text'},
+    {label:'Email Address',      type:'email'},
+    {label:'Phone Number',       type:'text'},
+    {label:'Date of Birth',      type:'text'},
+    {label:'Nationality',        type:'text'},
+    {label:'Passport / ID Number', type:'text'},
+    {label:'Current Institution / University', type:'text'},
+    {label:'Department / Faculty', type:'text'},
+    {label:'Position / Title',   type:'text'},
+    {label:'Research Field',     type:'text'},
+    {label:'Research Interests', type:'textarea'},
+    {label:'PhD / Doctorate Institution', type:'text'},
+    {label:'PhD Year Completed', type:'text'},
+    {label:'PhD Thesis Title',   type:'text'},
+    {label:'Languages spoken',   type:'checkbox'},
+    {label:'LinkedIn Profile',   type:'text'},
+    {label:'ORCID',              type:'text'},
+    {label:'Google Scholar URL', type:'text'},
+    {label:'Publications (summary)', type:'textarea'},
+    {label:'Research Project Title', type:'textarea'},
+    {label:'Research Project Summary', type:'textarea'},
+    {label:'Motivation Letter Summary', type:'textarea'},
+    {label:'Requested Budget (€)', type:'text'},
+    {label:'Project Duration',   type:'text'},
+    {label:'Host Institution',   type:'text'},
+    {label:'Supervisor Name',    type:'text'}
+  ];
+
+  var fieldList = standardFields.map(function(f,i) {
+    return (i+1)+'. LABEL: "'+f.label+'" | TYPE: '+f.type;
+  }).join('\n');
+
+  var prompt = 'Extract information from this CV and documents to fill these standard grant application fields.\n\n' +
+    'DOCUMENTS:\n' + docText + '\n\n' +
+    'FIELDS TO FILL:\n' + fieldList + '\n\n' +
+    'RULES:\n' +
+    '- Extract exact information found in the documents\n' +
+    '- For Research Interests and Project Summary: write 2-3 sentences based on what you find\n' +
+    '- If a field is not in the documents, return empty string\n' +
+    '- Return ONLY valid JSON array, no markdown\n\n' +
+    '[{"label":"...","value":"...","note":"..."}]';
+
+  callAI(SESSION.apiKey, SESSION.provider, prompt)
+    .then(function(raw) {
+      var cleaned = raw.replace(/```json\s*/gi,'').replace(/```/g,'').trim();
+      var start = cleaned.indexOf('['), end = cleaned.lastIndexOf(']');
+      var answers = JSON.parse(cleaned.substring(start, end+1));
+      SESSION.cvAnswers = answers;
+      renderCVAnswers(answers);
+      btn.disabled = false;
+      btn.textContent = '🔄 Regenerate CV Answers';
+    })
+    .catch(function(err) {
+      document.getElementById('review-content').innerHTML =
+        '<div class="alert a-red"><div>⚠</div><div>AI error: '+err.message+'</div></div>';
+      btn.disabled = false;
+      btn.textContent = '🧠 Generate CV Reference Answers';
+    });
+}
+
+function callAI(apiKey, provider, prompt) {
+  var url, body, headers;
+  if (provider === 'gemini') {
+    url = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key='+apiKey;
+    headers = {'Content-Type':'application/json'};
+    body = JSON.stringify({contents:[{parts:[{text:prompt}]}], generationConfig:{temperature:0.1,maxOutputTokens:3000}});
+  } else {
+    url = 'https://api.groq.com/openai/v1/chat/completions';
+    headers = {'Content-Type':'application/json','Authorization':'Bearer '+apiKey};
+    body = JSON.stringify({
+      model:'llama-3.3-70b-versatile',
+      messages:[
+        {role:'system',content:'Return ONLY valid JSON arrays. No markdown, no explanation.'},
+        {role:'user',content:prompt}
+      ],
+      temperature:0.1, max_tokens:3000
+    });
+  }
+  return fetch(url,{method:'POST',headers:headers,body:body}).then(function(r) {
+    if (!r.ok) return r.json().then(function(e){ throw new Error((e.error&&e.error.message)||'API error '+r.status); });
+    return r.json();
+  }).then(function(data) {
+    return provider==='gemini'
+      ? data.candidates[0].content.parts[0].text
+      : data.choices[0].message.content;
+  });
+}
+
+function renderCVAnswers(answers) {
+  var el = document.getElementById('review-content');
+  if (!answers||!answers.length) {
+    el.innerHTML = '<div class="alert a-amber"><div>⚠</div><div>Could not extract answers. Try re-uploading your CV.</div></div>';
+    return;
+  }
+  var html = '';
+  answers.forEach(function(a) {
+    var hasVal = a.value && a.value.trim();
+    var cls = hasVal ? 'result-ok' : 'result-man';
+    var icon = hasVal ? '✓' : '⚠';
+    var iconColor = hasVal ? 'var(--green)' : 'var(--muted)';
+    html += '<div class="result-item '+cls+'">';
+    html += '<div style="display:flex;gap:9px;align-items:flex-start;">';
+    html += '<span style="color:'+iconColor+';font-weight:800;flex-shrink:0;">'+icon+'</span>';
+    html += '<div style="flex:1;">';
+    html += '<div class="result-lbl">'+a.label+'</div>';
+    if (hasVal) html += '<div class="result-val">'+a.value+'</div>';
+    else html += '<div class="result-note">Not found in documents</div>';
+    html += '</div></div></div>';
+  });
+  el.innerHTML = html;
+}
+
+// ── EXCEL / CSV DOWNLOAD ──────────────────────────────
+function downloadExcel() {
+  var data = SESSION.lastFormResult;
+  if (!data || !data.answers || !data.answers.length) {
+    alert('No form results to export. Fill a form first, then come back here.'); return;
+  }
+
+  var answers  = data.answers  || [];
+  var warnings = data.warnings || [];
+  var date = new Date().toISOString().split('T')[0];
+  var formName = SESSION.formName || data.title || 'form';
+
+  // Build CSV rows
+  var rows = [
+    ['Grantura — Form Answers Export'],
+    ['Form:', formName],
+    ['URL:', data.url || SESSION.formUrl || ''],
+    ['Date:', date],
+    [''],
+    ['Field', 'AI Answer', 'Status', 'Your Correction', 'Note']
+  ];
+
+  answers.forEach(function(a) {
+    var warnInfo = warnings.find(function(w){ return w.label===a.label; });
+    var status   = a.value && !warnInfo ? 'Filled by AI' : warnInfo ? 'Needs correction' : 'Manual input needed';
+    var note     = warnInfo ? warnInfo.note : (a.note || '');
+    // Get correction input value if any
+    var safeId   = 'corr_'+(a.label||'f').replace(/[^a-zA-Z0-9]/g,'_').substring(0,20);
+    var corrEl   = document.querySelector('[id^="'+safeId+'"]');
+    var correction = corrEl ? corrEl.value.trim() : '';
+    rows.push([a.label||'', a.value||'', status, correction, note]);
+  });
+
+  // Convert to CSV with proper escaping
+  var csv = rows.map(function(row) {
+    return row.map(function(cell) {
+      var s = (cell||'').toString().replace(/"/g,'""');
+      return (s.includes(',') || s.includes('\n') || s.includes('"')) ? '"'+s+'"' : s;
+    }).join(',');
+  }).join('\r\n');
+
+  // Add BOM for Excel to recognise UTF-8
+  var blob = new Blob(['﻿' + csv], {type:'text/csv;charset=utf-8'});
+  var a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'grantura-'+formName.replace(/[^a-zA-Z0-9]/g,'-').substring(0,30)+'-'+date+'.csv';
+  a.click();
+}
 
 // ── XML DOWNLOAD ───────────────────────────────────────
 function downloadXML() {
