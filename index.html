@@ -1028,5 +1028,13 @@ window.addEventListener('DOMContentLoaded', function() {
   // Wire step nav click handlers already in HTML onclick attrs
 });
 </script>
+  // ── FOOTER ───────────────────────────────────────────────
+  <footer style="text-align:center; padding:15px; font-size:14px; color:#666;">
+  &copy; <span id="year"></span> GKS. All rights reserved.
+</footer>
+
+<script>
+  document.getElementById("year").textContent = new Date().getFullYear();
+</script>
 </body>
 </html>
